@@ -200,7 +200,7 @@ LetsEncrypt.send: body:
 
 We've received 2 available ACME challenges - `http-01` and `dns-01`
 
-Our (my :) ) target is DNS ACME challenge. There are tons of HTTP and TLS based
+Our target is DNS ACME challenge. There are tons of HTTP and TLS based
 automation tools over internet but they do not allow to request certificate for 
 internal company resources.
 
@@ -251,7 +251,7 @@ is to add TXT record
 _acme-challenge.bsys.domain.tld.	IN TXT	D9dIMId4QkXi1IBPBD4qkcIR1TmvfNbbtSRYznOoCY4
 ```
 
-into DNS zone `domain.tld` (OTRS-55286)
+into DNS zone `domain.tld`
 
 Whait until record is available:
 
