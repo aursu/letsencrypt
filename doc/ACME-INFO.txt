@@ -1,0 +1,873 @@
+ACME uses a profile of JWS, with the following restrictions:
+
+    The JWS MUST use the Flattened JSON Serialization
+    The JWS MUST be encoded using UTF-8
+    The JWS Header or Protected Header MUST include “alg” and “jwk” fields
+    The JWS MUST NOT have the value “none” in its “alg” field
+
+Additionally, JWS objects used in ACME MUST include the “nonce” header
+parameter.
+[https://letsencrypt.github.io/acme-spec/#rfc.section.3]
+
+A JWS represents these logical values:
+
+   o  JOSE Header
+   o  JWS Payload
+   o  JWS Signature
+
+For a JWS, the JOSE Header members are the union of the members of these
+values:
+
+   o  JWS Protected Header
+   o  JWS Unprotected Header
+[https://tools.ietf.org/html/rfc7515#section-3]
+
+JOSE Header
+    JSON object containing the parameters describing the cryptographic
+    operations and parameters employed. The JOSE (JSON Object Signing and
+    Encryption) Header is comprised of a set of Header Parameters.
+
+JWS Payload
+    The sequence of octets to be secured -- a.k.a. the message. The payload can
+    contain an arbitrary sequence of octets.
+
+JWS Signature
+    Digital signature or MAC over the JWS Protected Header and the JWS Payload.
+
+JWS Signing Input
+    The input to the digital signature or MAC computation.  Its value is
+    ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' ||
+    BASE64URL(JWS Payload)).
+
+Header Parameter
+    A name/value pair that is member of the JOSE Header.
+
+JWS Protected Header
+    JSON object that contains the Header Parameters that are integrity
+    protected by the JWS Signature digital signature or MAC operation. For the
+    JWS Compact Serialization, this comprises the entire JOSE Header. For the
+    JWS JSON Serialization, this is one component of the JOSE Header.
+
+JWS Unprotected Header
+    JSON object that contains the Header Parameters that are not integrity
+    protected. This can only be present when using the JWS JSON Serialization.
+
+JWS JSON Serialization
+    A representation of the JWS as a JSON object. Unlike the JWS Compact
+    Serialization, the JWS JSON Serialization enables multiple digital
+    signatures and/or MACs to be applied to the same content. This
+    representation is neither optimized for compactness nor URL-safe.
+
+Collision-Resistant Name
+    A name in a namespace that enables names to be allocated in a manner such
+    that they are highly unlikely to collide with other names. Examples of
+    collision-resistant namespaces include: Domain Names, Object Identifiers
+    (OIDs) as defined in the ITU-T X.660 and X.670 Recommendation series, and
+    Universally Unique IDentifiers (UUIDs) [RFC4122]. When using an
+    administratively delegated namespace, the definer of a name needs to take
+    reasonable precautions to ensure they are in control of the portion of the
+    namespace they use to define the name.
+
+StringOrURI
+    A JSON string value, with the additional requirement that while arbitrary
+    string values MAY be used, any value containing a ":" character MUST be a
+    URI [RFC3986].  StringOrURI values are compared as case-sensitive strings
+    with no transformations or canonicalizations applied.
+[https://tools.ietf.org/html/rfc7515#section-2]
+
+JWS JSON Serialization Overview
+
+    In the JWS JSON Serialization, one or both of the JWS Protected Header and
+    JWS Unprotected Header MUST be present. In this case, the members of the
+    JOSE Header are the union of the members of the JWS Protected Header and
+    the JWS Unprotected Header values that are present.
+
+    In the JWS JSON Serialization, a JWS is represented as a JSON object
+    containing some or all of these four members:
+
+    o  "protected", with the value BASE64URL(UTF8(JWS Protected Header))
+    o  "header", with the value JWS Unprotected Header
+    o  "payload", with the value BASE64URL(JWS Payload)
+    o  "signature", with the value BASE64URL(JWS Signature)
+
+    The three base64url-encoded result strings and the JWS Unprotected Header
+    value are represented as members within a JSON object. The inclusion of
+    some of these values is OPTIONAL. The JWS JSON Serialization can also
+    represent multiple signature and/or MAC values, rather than just one.
+[https://tools.ietf.org/html/rfc7515#section-3.2]
+
+JOSE Header
+
+    For a JWS, the members of the JSON object(s) representing the JOSE Header
+    describe the digital signature or MAC applied to the JWS Protected Header
+    and the JWS Payload and optionally additional properties of the JWS. The
+    Header Parameter names within the JOSE Header MUST be unique; JWS parsers
+    MUST either reject JWSs with duplicate Header Parameter names or use a JSON
+    parser that returns only the lexically last duplicate member name.
+
+    Implementations are required to understand the specific Header Parameters
+    defined by this specification "JSON Web Signature (JWS)" (RFC 7515) that
+    are designated as "MUST be understood" and process them in the manner
+    defined in this specification. All other Header Parameters defined by this
+    specification that are not so designated MUST be ignored when not
+    understood. Unless listed as a critical Header Parameter, per Section
+    4.1.11, all Header Parameters not defined by this specification MUST be
+    ignored when not understood.
+
+    There are three classes of Header Parameter names:
+
+    o  Registered Header Parameter names,
+    o  Public Header Parameter names, and
+    o  Private Header Parameter names.
+[https://tools.ietf.org/html/rfc7515#section-4]
+
+Registered Header Parameter Names
+
+    The following Header Parameter names for use in JWSs are registered in the
+    IANA "JSON Web Signature and Encryption Header Parameters" registry
+    established by Section 9.1, with meanings as defined in the subsections
+    below.
+
+    As indicated by the common registry, JWSs and JWEs share a common Header
+    Parameter space; when a parameter is used by both specifications, its usage
+    must be compatible between the specifications.
+[https://tools.ietf.org/html/rfc7515#section-4.1]
+
+"alg" (Algorithm) Header Parameter
+
+    The "alg" (algorithm) Header Parameter identifies the cryptographic
+    algorithm used to secure the JWS. The JWS Signature value is not valid if
+    the "alg" value does not represent a supported algorithm or if there is not
+    a key for use with that algorithm associated with the party that digitally
+    signed or MACed the content. "alg" values should either be registered in
+    the IANA "JSON Web Signature and Encryption Algorithms" registry
+    established by [JwA] or be a value that contains a Collision-Resistant
+    Name.  The "alg" value is a case-sensitive ASCII string containing a
+    StringOrURI value. This Header Parameter MUST be present and MUST be
+    understood and processed by implementations.
+    [https://tools.ietf.org/html/rfc7518#section-7.1]
+
+    A list of defined "alg" values for this use can be found in the IANA "JSON
+    Web Signature and Encryption Algorithms" registry established by [JWA]; the
+    initial contents of this registry are the values defined in Section 3.1 of
+    [JWA].
+[https://tools.ietf.org/html/rfc7515#section-4.1.1]
+
+"alg" (Algorithm) Header Parameter Values for JWS
+
+    The table below is the set of "alg" (algorithm) Header Parameter values
+    defined by this specification for use with JWS, each of which is explained
+    in more detail in the following sections:
+
+    +--------------+-------------------------------+--------------------+
+    | "alg" Param  | Digital Signature or MAC      | Implementation     |
+    | Value        | Algorithm                     | Requirements       |
+    +--------------+-------------------------------+--------------------+
+    | HS256        | HMAC using SHA-256            | Required           |
+    | HS384        | HMAC using SHA-384            | Optional           |
+    | HS512        | HMAC using SHA-512            | Optional           |
+    | RS256        | RSASSA-PKCS1-v1_5 using       | Recommended        |
+    |              | SHA-256                       |                    |
+    | RS384        | RSASSA-PKCS1-v1_5 using       | Optional           |
+    |              | SHA-384                       |                    |
+    | RS512        | RSASSA-PKCS1-v1_5 using       | Optional           |
+    |              | SHA-512                       |                    |
+    | ES256        | ECDSA using P-256 and SHA-256 | Recommended+       |
+    | ES384        | ECDSA using P-384 and SHA-384 | Optional           |
+    | ES512        | ECDSA using P-521 and SHA-512 | Optional           |
+    | PS256        | RSASSA-PSS using SHA-256 and  | Optional           |
+    |              | MGF1 with SHA-256             |                    |
+    | PS384        | RSASSA-PSS using SHA-384 and  | Optional           |
+    |              | MGF1 with SHA-384             |                    |
+    | PS512        | RSASSA-PSS using SHA-512 and  | Optional           |
+    |              | MGF1 with SHA-512             |                    |
+    | none         | No digital signature or MAC   | Optional           |
+    |              | performed                     |                    |
+    +--------------+-------------------------------+--------------------+
+
+    The use of "+" in the Implementation Requirements column indicates that the
+    requirement strength is likely to be increased in a future version of the
+    specification.
+[https://tools.ietf.org/html/rfc7518#section-3.1]
+
+"jwk" (JSON Web Key) Header Parameter
+
+    The "jwk" (JSON Web Key) Header Parameter is the public key that
+    corresponds to the key used to digitally sign the JWS. This key is
+    represented as a JSON Web Key [JWK]. Use of this Header Parameter is
+    OPTIONAL.
+[https://tools.ietf.org/html/rfc7515#section-4.1.3]
+
+"kid" (Key ID) Header Parameter
+
+    The "kid" (key ID) Header Parameter is a hint indicating which key was used
+    to secure the JWS. This parameter allows originators to explicitly signal a
+    change of key to recipients. The structure of the "kid" value is
+    unspecified. Its value MUST be a case-sensitive string. Use of this Header
+    Parameter is OPTIONAL.
+
+    When used with a JWK, the "kid" value is used to match a JWK "kid"
+    parameter value.
+[https://tools.ietf.org/html/rfc7515#section-4.1.4]
+
+4.1.11.  "crit" (Critical) Header Parameter
+
+    The "crit" (critical) Header Parameter indicates that extensions to this
+    specification and/or [JWA] are being used that MUST be understood and
+    processed. Its value is an array listing the Header Parameter names present
+    in the JOSE Header that use those extensions. If any of the listed
+    extension Header Parameters are not understood and supported by the
+    recipient, then the JWS is invalid.  Producers MUST NOT include Header
+    Parameter names defined by this specification or [JWA] for use with JWS,
+    duplicate names, or names that do not occur as Header Parameter names
+    within the JOSE Header in the "crit" list. Producers MUST NOT use the empty
+    list "[]" as the "crit" value. Recipients MAY consider the JWS to be
+    invalid if the critical list contains any Header Parameter names defined by
+    this specification or [JWA] for use with JWS or if any other constraints on
+    its use are violated. When used, this Header Parameter MUST be integrity
+    protected; therefore, it MUST occur only within the JWS Protected Header.
+    Use of this Header Parameter is OPTIONAL. This Header Parameter MUST be
+    understood and processed by implementations.
+
+    An example use, along with a hypothetical "exp" (expiration time) field is:
+
+    {"alg":"ES256",
+     "crit":["exp"],
+     "exp":1363284000
+    }
+[https://tools.ietf.org/html/rfc7515#section-4.1.11]
+
+Key Identification
+
+    It is necessary for the recipient of a JWS to be able to determine the key
+    that was employed for the digital signature or MAC operation. The key
+    employed can be identified using the Header Parameter methods described in
+    Section 4.1 or can be identified using methods that are outside the scope
+    of this specification.  Specifically, the Header Parameters "jku", "jwk",
+    "kid", "x5u", "x5c", "x5t", and "x5t#S256" can be used to identify the key
+    used. These Header Parameters MUST be integrity protected if the
+    information that they convey is to be utilized in a trust decision;
+    however, if the only information used in the trust decision is a key, these
+    parameters need not be integrity protected, since changing them in a way
+    that causes a different key to be used will cause the validation to fail.
+
+    The producer SHOULD include sufficient information in the Header Parameters
+    to identify the key used, unless the application uses another means or
+    convention to determine the key used. Validation of the signature or MAC
+    fails when the algorithm used requires a key (which is true of all
+    algorithms except for "none") and the key used cannot be determined.
+
+    The means of exchanging any shared symmetric keys used is outside the scope
+    of this specification.
+[https://tools.ietf.org/html/rfc7515#section-6]
+
+Serializations
+
+    JWSs use one of two serializations: the JWS Compact Serialization or the
+    JWS JSON Serialization.  Applications using this specification need to
+    specify what serialization and serialization features are used for that
+    application.  For instance, applications might specify that only the JWS
+    JSON Serialization is used, that only JWS JSON Serialization support for a
+    single signature or MAC value is used, or that support for multiple
+    signatures and/or MAC values is used.  JWS implementations only need to
+    implement the features needed for the applications they are designed to
+    support.
+[https://tools.ietf.org/html/rfc7515#section-7.1]
+
+JWS JSON Serialization
+
+    The JWS JSON Serialization represents digitally signed or MACed content as
+    a JSON object. This representation is neither optimized for compactness nor
+    URL-safe.
+
+    Two closely related syntaxes are defined for the JWS JSON Serialization: a
+    fully general syntax, with which content can be secured with more than one
+    digital signature and/or MAC operation, and a flattened syntax, which is
+    optimized for the single digital signature or MAC case.
+[https://tools.ietf.org/html/rfc7515#section-7.2]
+
+General JWS JSON Serialization Syntax
+
+    The following members are defined for use in top-level JSON objects used
+    for the fully general JWS JSON Serialization syntax:
+
+    payload
+        The "payload" member MUST be present and contain the value
+        BASE64URL(JWS Payload).
+
+    signatures
+        The "signatures" member value MUST be an array of JSON objects. Each
+        object represents a signature or MAC over the JWS Payload and the JWS
+        Protected Header.
+
+    The following members are defined for use in the JSON objects that are
+    elements of the "signatures" array:
+
+    protected
+        The "protected" member MUST be present and contain the value
+        BASE64URL(UTF8(JWS Protected Header)) when the JWS Protected Header
+        value is non-empty; otherwise, it MUST be absent. These Header
+        Parameter values are integrity protected.
+
+    header
+        The "header" member MUST be present and contain the value JWS
+        Unprotected Header when the JWS Unprotected Header value is non-empty;
+        otherwise, it MUST be absent. This value is represented as an unencoded
+        JSON object, rather than as a string. These Header Parameter values are
+        not integrity protected.
+
+    signature
+        The "signature" member MUST be present and contain the value
+        BASE64URL(JWS Signature).
+
+    At least one of the "protected" and "header" members MUST be present for
+    each signature/MAC computation so that an "alg" Header Parameter value is
+    conveyed.
+
+    Additional members can be present in both the JSON objects defined above;
+    if not understood by implementations encountering them, they MUST be
+    ignored.
+
+    The Header Parameter values used when creating or validating individual
+    signature or MAC values are the union of the two sets of Header Parameter
+    values that may be present: (1) the JWS Protected Header represented in the
+    "protected" member of the signature/MAC's array element, and (2) the JWS
+    Unprotected Header in the "header" member of the signature/MAC's array
+    element. The union of these sets of Header Parameters comprises the JOSE
+    Header. The Header Parameter names in the two locations MUST be disjoint.
+
+    Each JWS Signature value is computed using the parameters of the
+    corresponding JOSE Header value in the same manner as for the JWS Compact
+    Serialization. This has the desirable property that each JWS Signature
+    value represented in the "signatures" array is identical to the value that
+    would have been computed for the same parameter in the JWS Compact
+    Serialization, provided that the JWS Protected Header value for that
+    signature/MAC computation (which represents the integrity-protected Header
+    Parameter values) matches that used in the JWS Compact Serialization.
+
+    In summary, the syntax of a JWS using the general JWS JSON Serialization is
+    as follows:
+
+    {
+        "payload":"<payload contents>",
+        "signatures":[
+            {"protected":"<integrity-protected header 1 contents>",
+             "header":<non-integrity-protected header 1 contents>,
+             "signature":"<signature 1 contents>"},
+            ...
+            {"protected":"<integrity-protected header N contents>",
+             "header":<non-integrity-protected header N contents>,
+             "signature":"<signature N contents>"}]
+    }
+[https://tools.ietf.org/html/rfc7515#section-7.2.1]
+
+Flattened JWS JSON Serialization Syntax
+
+    The flattened JWS JSON Serialization syntax is based upon the general
+    syntax but flattens it, optimizing it for the single digital signature/MAC
+    case. It flattens it by removing the "signatures" member and instead
+    placing those members defined for use in the "signatures" array (the
+    "protected", "header", and "signature" members) in the top-level JSON
+    object (at the same level as the "payload" member).
+
+    The "signatures" member MUST NOT be present when using this syntax. Other
+    than this syntax difference, JWS JSON Serialization objects using the
+    flattened syntax are processed identically to those using the general
+    syntax.
+
+    In summary, the syntax of a JWS using the flattened JWS JSON Serialization
+    is as follows:
+
+    {
+        "payload":"<payload contents>",
+        "protected":"<integrity-protected header contents>",
+        "header":<non-integrity-protected header contents>,
+        "signature":"<signature contents>"
+    }
+[https://tools.ietf.org/html/rfc7515#section-7.2.2]
+
+Base 64 Encoding with URL and Filename Safe Alphabet
+
+    An alternative alphabet has been suggested that would use "~" as the 63rd
+    character. Since the "~" character has special meaning in some file system
+    environments, the encoding described in this section is recommended
+    instead. The remaining unreserved URI character is ".", but some file
+    system environments do not permit multiple "." in a filename, thus making
+    the "." character unattractive as well.
+
+    The pad character "=" is typically percent-encoded when used in an URI
+    ("Uniform Resource Identifier (URI): Generic Syntax", STD 66, RFC 3986),
+    but if the data length is known implicitly, this can be avoided by skipping
+    the padding.
+
+    This encoding may be referred to as "base64url".  This encoding should not
+    be regarded as the same as the "base64" encoding and should not be referred
+    to as only "base64". Unless clarified otherwise, "base64" refers to the
+    base 64 in the previous section.
+
+    This encoding is technically identical to the previous one, except for the
+    62:nd and 63:rd alphabet character, as indicated in Table 2.
+
+            Table 2: The "URL and Filename safe" Base 64 Alphabet
+
+        Value Encoding  Value Encoding  Value Encoding  Value Encoding
+            0 A            17 R            34 i            51 z
+            1 B            18 S            35 j            52 0
+            2 C            19 T            36 k            53 1
+            3 D            20 U            37 l            54 2
+            4 E            21 V            38 m            55 3
+            5 F            22 W            39 n            56 4
+            6 G            23 X            40 o            57 5
+            7 H            24 Y            41 p            58 6
+            8 I            25 Z            42 q            59 7
+            9 J            26 a            43 r            60 8
+           10 K            27 b            44 s            61 9
+           11 L            28 c            45 t            62 - (minus)
+           12 M            29 d            46 u            63 _
+           13 N            30 e            47 v           (underline)
+           14 O            31 f            48 w
+           15 P            32 g            49 x
+           16 Q            33 h            50 y         (pad) =
+[https://tools.ietf.org/html/rfc4648#section-5]
+ABS: a-zA-Z0-9_-
+
+Notes on Implementing base64url Encoding without Padding
+
+    This appendix describes how to implement base64url encoding and decoding
+    functions without padding based upon standard base64 encoding and decoding
+    functions that do use padding.
+    
+    To be concrete, example C# code implementing these functions is shown
+    below.  Similar code could be used in other languages.
+    
+    static string base64urlencode(byte [] arg)
+    {
+        string s = Convert.ToBase64String(arg); // Regular base64 encoder
+        s = s.Split('=')[0]; // Remove any trailing '='s
+        s = s.Replace('+', '-'); // 62nd char of encoding
+        s = s.Replace('/', '_'); // 63rd char of encoding
+        return s;
+    }
+    
+    static byte [] base64urldecode(string arg)
+    {
+        string s = arg;
+        s = s.Replace('-', '+'); // 62nd char of encoding
+        s = s.Replace('_', '/'); // 63rd char of encoding
+        switch (s.Length % 4) // Pad with trailing '='s
+        {
+            case 0: break; // No pad chars in this case
+            case 2: s += "=="; break; // Two pad chars
+            case 3: s += "="; break; // One pad char
+            default: throw new System.Exception(
+                "Illegal base64url string!");
+        }
+        return Convert.FromBase64String(s); // Standard base64 decoder
+    }
+    
+    As per the example code above, the number of '=' padding characters that
+    needs to be added to the end of a base64url-encoded string without padding
+    to turn it into one with padding is a deterministic function of the length
+    of the encoded string.  Specifically, if the length mod 4 is 0, no padding
+    is added; if the length mod 4 is 2, two '=' padding characters are added;
+    if the length mod 4 is 3, one '=' padding character is added; if the length
+    mod 4 is 1, the input is malformed.
+[https://tools.ietf.org/html/rfc7515#appendix-C]
+
+Base64urlUInt
+    The representation of a positive or zero integer value as the base64url
+    encoding of the value's unsigned big-endian representation as an octet
+    sequence. The octet sequence MUST utilize the minimum number of octets
+    needed to represent the value. Zero is represented as BASE64URL(single
+    zero-valued octet), which is "AA".
+[https://tools.ietf.org/html/rfc7518#section-2]
+
+Cryptographic Algorithms for Keys
+
+    A JSON Web Key (JWK) [JWK] is a JSON data structure that represents a
+    cryptographic key.  These keys can be either asymmetric or symmetric. They
+    can hold both public and private information about the key. This section
+    defines the parameters for keys using the algorithms specified by this
+    document.
+
+"kty" (Key Type) Parameter Values
+
+    The table below is the set of "kty" (key type) parameter values that are
+    defined by this specification for use in JWKs.
+
+    +-------------+--------------------------------+--------------------+
+    | "kty" Param | Key Type                       | Implementation     |
+    | Value       |                                | Requirements       |
+    +-------------+--------------------------------+--------------------+
+    | EC          | Elliptic Curve [DSS]           | Recommended+       |
+    | RSA         | RSA [RFC3447]                  | Required           |
+    | oct         | Octet sequence (used to        | Required           |
+    |             | represent symmetric keys)      |                    |
+    +-------------+--------------------------------+--------------------+
+
+Parameters for Elliptic Curve Keys
+
+    JWKs can represent Elliptic Curve [DSS] keys. In this case, the "kty"
+    member value is "EC".
+
+Parameters for Elliptic Curve Public Keys
+
+    An Elliptic Curve public key is represented by a pair of coordinates drawn
+    from a finite field, which together define a point on an Elliptic Curve.
+    The following members MUST be present for all Elliptic Curve public keys:
+
+    o  "crv"
+    o  "x"
+
+    The following member MUST also be present for Elliptic Curve public keys
+    for the three curves defined in the following section:
+
+    o  "y"
+
+"crv" (Curve) Parameter
+
+    The "crv" (curve) parameter identifies the cryptographic curve used with
+    the key.  Curve values from [DSS] used by this specification are:
+
+    o  "P-256"
+    o  "P-384"
+    o  "P-521"
+
+    These values are registered in the IANA "JSON Web Key Elliptic Curve"
+    registry defined in Section 7.6. Additional "crv" values can be registered
+    by other specifications. Specifications registering additional curves must
+    define what parameters are used to represent keys for the curves
+    registered. The "crv" value is a case-sensitive string.
+
+"x" (X Coordinate) Parameter
+
+    The "x" (x coordinate) parameter contains the x coordinate for the Elliptic
+    Curve point. It is represented as the base64url encoding of the octet
+    string representation of the coordinate, as defined in Section 2.3.5 of
+    SEC1 [SEC1].  The length of this octet string MUST be the full size of a
+    coordinate for the curve specified in the "crv" parameter. For example, if
+    the value of "crv" is "P-521", the octet string must be 66 octets long.
+
+"y" (Y Coordinate) Parameter
+
+    The "y" (y coordinate) parameter contains the y coordinate for the Elliptic
+    Curve point. It is represented as the base64url encoding of the octet
+    string representation of the coordinate, as defined in Section 2.3.5 of
+    SEC1 [SEC1]. The length of this octet string MUST be the full size of a
+    coordinate for the curve specified in the "crv" parameter. For example, if
+    the value of "crv" is "P-521", the octet string must be 66 octets long.
+[https://tools.ietf.org/html/rfc7518#section-6.2.1]
+
+Parameters for Elliptic Curve Private Keys
+
+    In addition to the members used to represent Elliptic Curve public keys,
+    the following member MUST be present to represent Elliptic Curve private
+    keys.
+
+"d" (ECC Private Key) Parameter
+
+    The "d" (ECC private key) parameter contains the Elliptic Curve private key
+    value. It is represented as the base64url encoding of the octet string
+    representation of the private key value, as defined in Section 2.3.7 of
+    SEC1 [SEC1]. The length of this octet string MUST be
+    ceiling(log-base-2(n)/8) octets (where n is the order of the curve).
+[https://tools.ietf.org/html/rfc7518#section-6.2.2]
+
+Parameters for RSA Keys
+
+   JWKs can represent RSA [RFC3447] keys.  In this case, the "kty"
+   member value is "RSA".  The semantics of the parameters defined below
+   are the same as those defined in Sections 3.1 and 3.2 of RFC 3447.
+
+Parameters for RSA Public Keys
+
+    The following members MUST be present for RSA public keys.
+
+"n" (Modulus) Parameter
+
+    The "n" (modulus) parameter contains the modulus value for the RSA public
+    key. It is represented as a Base64urlUInt-encoded value. Note that
+    implementers have found that some cryptographic libraries prefix an extra
+    zero-valued octet to the modulus representations they return, for instance,
+    returning 257 octets for a 2048-bit key, rather than 256.  Implementations
+    using such libraries will need to take care to omit the extra octet from
+    the base64url-encoded representation.
+
+"e" (Exponent) Parameter
+
+    The "e" (exponent) parameter contains the exponent value for the RSA public
+    key. It is represented as a Base64urlUInt-encoded value.
+
+    For instance, when representing the value 65537, the octet sequence to be
+    base64url-encoded MUST consist of the three octets [1, 0, 1]; the resulting
+    representation for this value is "AQAB".
+[https://tools.ietf.org/html/rfc7518#section-6.3.1]
+
+Parameters for RSA Private Keys
+
+    In addition to the members used to represent RSA public keys, the following
+    members are used to represent RSA private keys. The parameter "d" is
+    REQUIRED for RSA private keys. The others enable optimizations and SHOULD
+    be included by producers of JWKs representing RSA private keys. If the
+    producer includes any of the other private key parameters, then all of the
+    others MUST be present, with the exception of "oth", which MUST only be
+    present when more than two prime factors were used.
+
+"d" (Private Exponent) Parameter
+
+    The "d" (private exponent) parameter contains the private exponent value
+    for the RSA private key. It is represented as a Base64urlUInt-encoded
+    value.
+
+"p" (First Prime Factor) Parameter
+
+    The "p" (first prime factor) parameter contains the first prime factor. It
+    is represented as a Base64urlUInt-encoded value.
+
+"q" (Second Prime Factor) Parameter
+
+    The "q" (second prime factor) parameter contains the second prime factor.
+    It is represented as a Base64urlUInt-encoded value.
+
+"dp" (First Factor CRT Exponent) Parameter
+
+    The "dp" (first factor CRT exponent) parameter contains the Chinese
+    Remainder Theorem (CRT) exponent of the first factor. It is represented as
+    a Base64urlUInt-encoded value.
+
+"dq" (Second Factor CRT Exponent) Parameter
+
+    The "dq" (second factor CRT exponent) parameter contains the CRT exponent
+    of the second factor. It is represented as a Base64urlUInt-encoded value.
+
+"qi" (First CRT Coefficient) Parameter
+
+    The "qi" (first CRT coefficient) parameter contains the CRT coefficient of
+    the second factor. It is represented as a Base64urlUInt-encoded value.
+
+"oth" (Other Primes Info) Parameter
+
+    The "oth" (other primes info) parameter contains an array of information
+    about any third and subsequent primes, should they exist. When only two
+    primes have been used (the normal case), this parameter MUST be omitted.
+    When three or more primes have been used, the number of array elements MUST
+    be the number of primes used minus two. For more information on this case,
+    see the description of the OtherPrimeInfo parameters in Appendix A.1.2 of
+    RFC 3447 [RFC3447], upon which the following parameters are modeled. If the
+    consumer of a JWK does not support private keys with more than two primes
+    and it encounters a private key that includes the "oth" parameter, then it
+    MUST NOT use the key. Each array element MUST be an object with the
+    following members.
+
+"r" (Prime Factor)
+
+    The "r" (prime factor) parameter within an "oth" array member represents
+    the value of a subsequent prime factor. It is represented as a
+    Base64urlUInt-encoded value.
+
+"d" (Factor CRT Exponent)
+
+    The "d" (factor CRT exponent) parameter within an "oth" array member
+    represents the CRT exponent of the corresponding prime factor. It is
+    represented as a Base64urlUInt-encoded value.
+
+"t" (Factor CRT Coefficient)
+
+    The "t" (factor CRT coefficient) parameter within an "oth" array member
+    represents the CRT coefficient of the corresponding prime factor. It is
+    represented as a Base64urlUInt-encoded value.
+[https://tools.ietf.org/html/rfc7518#section-6.3.2]
+
+
+
+
+
+[JWA] "JSON Web Algorithms (JWA)" (RFC 7518)
+
+[JWK] "JSON Web Key (JWK)" (RFC 7517)
+
+[RFC3447] Jonsson, J. and B. Kaliski, "Public-Key Cryptography Standards
+(PKCS) #1: RSA Cryptography Specifications Version 2.1", RFC 3447,
+DOI 10.17487/RFC3447, February 2003, [https://tools.ietf.org/html/rfc3447]
+
+[DSS] National Institute of Standards and Technology (NIST), "Digital Signature
+Standard (DSS)", FIPS PUB 186-4, July 2013,
+<http://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf>.
+
+[SEC1] Standards for Efficient Cryptography Group, "SEC 1: Elliptic Curve
+Cryptography", Version 2.0, May 2009, <http://www.secg.org/sec1-v2.pdf>.
+
+
+
+
+
+Python implementation of "A.1.  Example JWS Using HMAC SHA-256"
+>>> import hmac, hashlib
+>>> jwt = "{\"typ\":\"JWT\",\r\n \"alg\":\"HS256\"}"
+>>> [ord(c) for c in jwt]
+[123, 34, 116, 121, 112, 34, 58, 34, 74, 87, 84, 34, 44, 13, 10, 32, 34, 97, 108, 103, 34, 58, 34, 72, 83, 50, 53, 54, 34, 125]
+>>> type(jwt)
+<type 'str'>
+>>> jwt.encode('utf-8')
+'{"typ":"JWT",\r\n "alg":"HS256"}'
+>>> jwt.decode('utf-8')
+u'{"typ":"JWT",\r\n "alg":"HS256"}'
+>>> s = jwt.encode('utf-8')
+>>> import base64
+>>> base64.urlsafe_b64encode(s).rstrip("=")
+'eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9'
+>>> pay="{\"iss\":\"joe\",\r\n \"exp\":1300819380,\r\n \"http://example.com/is_root\":true}"
+>>> [ord(c) for c in pay]
+[123, 34, 105, 115, 115, 34, 58, 34, 106, 111, 101, 34, 44, 13, 10, 32, 34, 101, 120, 112, 34, 58, 49, 51, 48, 48, 56, 49, 57, 51, 56, 48, 44, 13, 10, 32, 34, 104, 116, 116, 112, 58, 47, 47, 101, 120, 97, 109, 112, 108, 101, 46, 99, 111, 109, 47, 105, 115, 95, 114, 111, 111, 116, 34, 58, 116, 114, 117, 101, 125]
+>>> p = pay.encode('utf-8')
+>>> 
+>>> base64.urlsafe_b64encode(p).rstrip("=")
+'eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ'
+>>> sig="eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ"
+>>> [ord(c) for c in sig]
+[101, 121, 74, 48, 101, 88, 65, 105, 79, 105, 74, 75, 86, 49, 81, 105, 76, 65, 48, 75, 73, 67, 74, 104, 98, 71, 99, 105, 79, 105, 74, 73, 85, 122, 73, 49, 78, 105, 74, 57, 46, 101, 121, 74, 112, 99, 51, 77, 105, 79, 105, 74, 113, 98, 50, 85, 105, 76, 65, 48, 75, 73, 67, 74, 108, 101, 72, 65, 105, 79, 106, 69, 122, 77, 68, 65, 52, 77, 84, 107, 122, 79, 68, 65, 115, 68, 81, 111, 103, 73, 109, 104, 48, 100, 72, 65, 54, 76, 121, 57, 108, 101, 71, 70, 116, 99, 71, 120, 108, 76, 109, 78, 118, 98, 83, 57, 112, 99, 49, 57, 121, 98, 50, 57, 48, 73, 106, 112, 48, 99, 110, 86, 108, 102, 81]
+>>> h = hmac.new("AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow","eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ",hashlib.sha256)
+>>> h.digest()
+'e\xe92]iq\xbe\xe0\x8d\xf4\x7f\x1c\xb8:\xd9}\xa4Z\xde\x93\t\x84zo\xe9\x02\x85uJ\x97l\xb7'
+>>> h.hexdigest()
+'65e9325d6971bee08df47f1cb83ad97da45ade9309847a6fe90285754a976cb7'
+>>> base64.urlsafe_b64encode(h.digest()).rstrip("=")
+'ZekyXWlxvuCN9H8cuDrZfaRa3pMJhHpv6QKFdUqXbLc'
+>>> key='AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow'
+>>> k=base64.urlsafe_b64decode(key)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/usr/lib64/python2.7/base64.py", line 112, in urlsafe_b64decode
+    return b64decode(s, '-_')
+  File "/usr/lib64/python2.7/base64.py", line 76, in b64decode
+    raise TypeError(msg)
+TypeError: Incorrect padding
+>>> key='AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow='
+>>> k=base64.urlsafe_b64decode(key)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/usr/lib64/python2.7/base64.py", line 112, in urlsafe_b64decode
+    return b64decode(s, '-_')
+  File "/usr/lib64/python2.7/base64.py", line 76, in b64decode
+    raise TypeError(msg)
+TypeError: Incorrect padding
+>>> key='AyM1SysPpbyDfgZld3umj1qzKObwVMkoqQ-EstJQLr_T-1qS0gZH75aKtMN3Yj0iPS4hcgUuTwjAzZr1Z9CAow=='
+>>> k=base64.urlsafe_b64decode(key)
+>>> h1=hmac.new(k,"eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ",hashlib.sha256)
+>>> base64.urlsafe_b64encode(h1.digest()).rstrip("=")
+'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+>>>
+[https://tools.ietf.org/html/rfc7515#appendix-A.1]
+
+
+HTTP/1.1 100 Continue
+Expires: Fri, 18 Nov 2016 02:48:02 GMT
+Cache-Control: max-age=0, no-cache, no-store
+Pragma: no-cache
+
+HTTP/1.1 201 Created
+Server: nginx
+Content-Type: application/json
+Content-Length: 577
+Boulder-Request-Id: uB73xffgkuCN_zfkDPcmu6rDYZ9GGtAi818UnrESIq4
+Boulder-Requester: 6302132
+Link: <https://acme-v01.api.letsencrypt.org/acme/new-authz>;rel="next"
+Link: <https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf>;rel="terms-of-service"
+Location: https://acme-v01.api.letsencrypt.org/acme/reg/6302132
+Replay-Nonce: sM2MkdqpojmP6feGK08E4wFqOFEQkGv2Pan1_czDRFA
+X-Frame-Options: DENY
+Strict-Transport-Security: max-age=604800
+Expires: Fri, 18 Nov 2016 02:48:03 GMT
+Cache-Control: max-age=0, no-cache, no-store
+Pragma: no-cache
+Date: Fri, 18 Nov 2016 02:48:03 GMT
+Connection: keep-alive
+
+{
+  "id": 6302132,
+  "key": {
+    "kty": "RSA",
+    "n": "rUARavyClhlCQN69KSg5AAM8KpnJSbf7ptMmbgNkwfqxQsr8H_4wkTaioroX2jcLwNNzXsu7gLHon2jaijo50glW0fynMIa-Jir8GhRH-PoAuzHFTidVRSNrqMUn-8URdeuLYGBnHmKBciKC244O_Nj14bRN6DWha93l2O8eV3uC5pRCQbLHzLCcVE-oZbj5pCWsrtfG3ip7rlEbtIvmdc43kdqYuup89t70KYKEwsyhwf8DJ71oz3PacaEsTSyAeZsaJFtqnLbzP8hg4iyqW9pPVTfh7L0UKDO2ipJsC7D746o7LJ7a0eOjiSxYdUXQUI7m2HewyrV-j-_5u9e5BQ",
+    "e": "AQAB"
+  },
+  "contact": [
+    "mailto:ssladmin@company.com"
+  ],
+  "initialIp": "217.240.16.238",
+  "createdAt": "2016-11-18T02:48:03.617634704Z",
+  "Status": ""
+}
+
+
+HTTP/1.1 409 Conflict
+Server: nginx
+Content-Type: application/problem+json
+Content-Length: 107
+Boulder-Request-Id: j4Pe-kBW4snEblYYk_1LBzCWQNFDwpQiVwEGFeaZc68
+Boulder-Requester: 6302132
+Location: https://acme-v01.api.letsencrypt.org/acme/reg/6302132
+Replay-Nonce: 1xlSRHQZkGi0ikJP1OmznB7qh7Ej2VWYlPROvkRhslI
+Expires: Fri, 18 Nov 2016 02:50:25 GMT
+Cache-Control: max-age=0, no-cache, no-store
+Pragma: no-cache
+Date: Fri, 18 Nov 2016 02:50:25 GMT
+Connection: close
+
+{
+  "type": "urn:acme:error:malformed",
+  "detail": "Registration key is already in use",
+  "status": 409
+}
+
+1st challenge
+
+LetsEncrypt.send: payload: {"keyAuthorization": "Lkg8f0ujm5-ESlEg7e1U3eqyeA00mt8aE9ikBtaJ794.f_y-mGhGlj24llYFTYnufeIKYqOrmPNsCqNhtx2KxQY", "type": "dns-01", "resource": "challenge"}
+LetsEncrypt.send: jws: {"header": {"alg": "RS256", "jwk": {"e": "AQAB", "kty": "RSA", "n": "hI5loPZxmCrLJjs8HgQrYgJwWp0bGx2vITs-2pDWWA_HZURGy3f44Ajde8f1yR6jgkVwF6k9S8vFC7MJIuhM95dTXesB4DHuTRFnE54_9LcrRSi5S6EHyKiwYoEcemyuhRzD3M2TJJ1IPV02z4tlSJYgxe3RxRUH1n6pHbIVyu8RHf6enjHCEzLgBgmfhtHXfkB9nBSy2tOOkFzKHaBsMPvkOwsPQ5xbM1XCa04Z9a-knruAmXyDNIjQsb9Zou0RRcNy5LqDN273r3VYaGAgkKWSeI3Zgr1cBVCNnCGEXKnlfW5syXrkPPQf4iga2T5Furp0P68trga28BXOtHoC_Q"}}, "protected": "eyJub25jZSI6ICJpM1FiQ3NMaDdWNFRENVNGNWVfQ2VRZjZDNHJIQ3pLVFdnVENWUXh5NzZjIiwgImFsZyI6ICJSUzI1NiIsICJqd2siOiB7ImUiOiAiQVFBQiIsICJrdHkiOiAiUlNBIiwgIm4iOiAiaEk1bG9QWnhtQ3JMSmpzOEhnUXJZZ0p3V3AwYkd4MnZJVHMtMnBEV1dBX0haVVJHeTNmNDRBamRlOGYxeVI2amdrVndGNms5Uzh2RkM3TUpJdWhNOTVkVFhlc0I0REh1VFJGbkU1NF85TGNyUlNpNVM2RUh5S2l3WW9FY2VteXVoUnpEM00yVEpKMUlQVjAyejR0bFNKWWd4ZTNSeFJVSDFuNnBIYklWeXU4UkhmNmVuakhDRXpMZ0JnbWZodEhYZmtCOW5CU3kydE9Pa0Z6S0hhQnNNUHZrT3dzUFE1eGJNMVhDYTA0WjlhLWtucnVBbVh5RE5JalFzYjlab3UwUlJjTnk1THFETjI3M3IzVllhR0Fna0tXU2VJM1pncjFjQlZDTm5DR0VYS25sZlc1c3lYcmtQUFFmNGlnYTJUNUZ1cnAwUDY4dHJnYTI4QlhPdEhvQ19RIn19", "payload": "eyJrZXlBdXRob3JpemF0aW9uIjogIkxrZzhmMHVqbTUtRVNsRWc3ZTFVM2VxeWVBMDBtdDhhRTlpa0J0YUo3OTQuZl95LW1HaEdsajI0bGxZRlRZbnVmZUlLWXFPcm1QTnNDcU5odHgyS3hRWSIsICJ0eXBlIjogImRucy0wMSIsICJyZXNvdXJjZSI6ICJjaGFsbGVuZ2UifQ", "signature": "UIzb8T6ScZNzYUcXJImqLS9KhjG1W6yfojLiKWHNLFljQsCUSkM-zEwFYBuIpQl36hnavf9nR_woyJHbkyIXYD2iN40iT2mqjZx0VVXGo4f8MKR842fhxWLuSm0V7teDzQjM7J7sORzu3wCtvzJJieotzNOdmQSHfM7AWW5Vszt1ZrOFBDHx0IyO414utexr4ZLLJ7rowISGegFkz9aLFiJDditDk9253qiPz825T8et6NtEBmuAYUEUhrfQbJPjg1W7o9pwwG3NnqXRPes7neT0GKdXWRCcBrf5ELB1pMXEK3n5sLtP-6tUitjp53N_98TaIBAR_vy9bsPU2ptljQ"}
+LetsEncrypt.send: resource: challenge
+LetsEncrypt.send: d: status: pending
+LetsEncrypt.send: d: keyAuthorization: Lkg8f0ujm5-ESlEg7e1U3eqyeA00mt8aE9ikBtaJ794.f_y-mGhGlj24llYFTYnufeIKYqOrmPNsCqNhtx2KxQY
+LetsEncrypt.send: d: token: Lkg8f0ujm5-ESlEg7e1U3eqyeA00mt8aE9ikBtaJ794
+LetsEncrypt.send: d: type: dns-01
+LetsEncrypt.send: d: uri: https://acme-v01.api.letsencrypt.org/acme/challenge/XgkanDvs8DU3lJEbHQjj25nBf71Lb3pwBXiVEDpeQz0/354558687
+LetsEncrypt.send: d: nonce: iKSFp0qQVBfvdOD3d1-4QzFdwuCr3_CJ5PnDQZoecUY
+LetsEncrypt.send: h: Server: nginx
+LetsEncrypt.send: h: Content-Type: application/json
+LetsEncrypt.send: h: Content-Length: 334
+LetsEncrypt.send: h: Boulder-Request-Id: EDp6zsm4Z4S1yOLqcZ64mMisBMBpa8ngCIMhJ5JF4Pg
+LetsEncrypt.send: h: Boulder-Requester: 6384707
+LetsEncrypt.send: h: Link: <https://acme-v01.api.letsencrypt.org/acme/authz/XgkanDvs8DU3lJEbHQjj25nBf71Lb3pwBXiVEDpeQz0>;rel="up"
+LetsEncrypt.send: h: Location: https://acme-v01.api.letsencrypt.org/acme/challenge/XgkanDvs8DU3lJEbHQjj25nBf71Lb3pwBXiVEDpeQz0/354558687
+LetsEncrypt.send: h: Replay-Nonce: iKSFp0qQVBfvdOD3d1-4QzFdwuCr3_CJ5PnDQZoecUY
+LetsEncrypt.send: h: Expires: Mon, 21 Nov 2016 16:37:53 GMT
+LetsEncrypt.send: h: Cache-Control: max-age=0, no-cache, no-store
+LetsEncrypt.send: h: Pragma: no-cache
+LetsEncrypt.send: h: Date: Mon, 21 Nov 2016 16:37:53 GMT
+LetsEncrypt.send: h: Connection: close
+
+2nd challenge
+
+LetsEncrypt.send: payload: {"keyAuthorization": "Lkg8f0ujm5-ESlEg7e1U3eqyeA00mt8aE9ikBtaJ794.f_y-mGhGlj24llYFTYnufeIKYqOrmPNsCqNhtx2KxQY", "type": "dns-01", "resource": "challenge"}
+LetsEncrypt.send: jws: {"header": {"alg": "RS256", "jwk": {"e": "AQAB", "kty": "RSA", "n": "hI5loPZxmCrLJjs8HgQrYgJwWp0bGx2vITs-2pDWWA_HZURGy3f44Ajde8f1yR6jgkVwF6k9S8vFC7MJIuhM95dTXesB4DHuTRFnE54_9LcrRSi5S6EHyKiwYoEcemyuhRzD3M2TJJ1IPV02z4tlSJYgxe3RxRUH1n6pHbIVyu8RHf6enjHCEzLgBgmfhtHXfkB9nBSy2tOOkFzKHaBsMPvkOwsPQ5xbM1XCa04Z9a-knruAmXyDNIjQsb9Zou0RRcNy5LqDN273r3VYaGAgkKWSeI3Zgr1cBVCNnCGEXKnlfW5syXrkPPQf4iga2T5Furp0P68trga28BXOtHoC_Q"}}, "protected": "eyJub25jZSI6ICJGbjhBOHVXWlRSRDFBOFVleV9rbC1hSGhYZ2Nlckh5ZFk0VTlvdWxWaUtvIiwgImFsZyI6ICJSUzI1NiIsICJqd2siOiB7ImUiOiAiQVFBQiIsICJrdHkiOiAiUlNBIiwgIm4iOiAiaEk1bG9QWnhtQ3JMSmpzOEhnUXJZZ0p3V3AwYkd4MnZJVHMtMnBEV1dBX0haVVJHeTNmNDRBamRlOGYxeVI2amdrVndGNms5Uzh2RkM3TUpJdWhNOTVkVFhlc0I0REh1VFJGbkU1NF85TGNyUlNpNVM2RUh5S2l3WW9FY2VteXVoUnpEM00yVEpKMUlQVjAyejR0bFNKWWd4ZTNSeFJVSDFuNnBIYklWeXU4UkhmNmVuakhDRXpMZ0JnbWZodEhYZmtCOW5CU3kydE9Pa0Z6S0hhQnNNUHZrT3dzUFE1eGJNMVhDYTA0WjlhLWtucnVBbVh5RE5JalFzYjlab3UwUlJjTnk1THFETjI3M3IzVllhR0Fna0tXU2VJM1pncjFjQlZDTm5DR0VYS25sZlc1c3lYcmtQUFFmNGlnYTJUNUZ1cnAwUDY4dHJnYTI4QlhPdEhvQ19RIn19", "payload": "eyJrZXlBdXRob3JpemF0aW9uIjogIkxrZzhmMHVqbTUtRVNsRWc3ZTFVM2VxeWVBMDBtdDhhRTlpa0J0YUo3OTQuZl95LW1HaEdsajI0bGxZRlRZbnVmZUlLWXFPcm1QTnNDcU5odHgyS3hRWSIsICJ0eXBlIjogImRucy0wMSIsICJyZXNvdXJjZSI6ICJjaGFsbGVuZ2UifQ", "signature": "bpiNn77WlLIzfpuhYT1_Vc_6zhr74jeYnmN1Q-2Ac4_STYGGTKWfq0kGqeLsTHTGk_33VqHRhMW9h_Nw8dORTjr4VOIa2I4hEO-LYZGiKI-j_IIuIBCtM8emrwQaU8BA3ht0P5QJp9jGEyGk4QLOImkLelFtEmtVGpAxqjticuqaOth35GRg3Nto1_b0s2lXotHLSJYPCsz80fNyNhhFMn89ghohv7UO_csAvigXGcyojEgjZ6Sk-BMGMmM0qjP9bFYBZ0NVJaCqhyIoebFI5W_0PRey2jzUZG1sHJSyzi9keQA-JYlw9gbpzMc8F2TRDKg7r_wyo_dkVV-uGhWw-A"}
+LetsEncrypt.send: resource: challenge
+LetsEncrypt.send: d: status: valid
+LetsEncrypt.send: d: validationRecord: [{u'Authorities': [u'devteam.club.\t1800\tIN\tNS\tdns1.registrar-servers.com.', u'devteam.club.\t1800\tIN\tNS\tdns2.registrar-servers.com.'], u'hostname': u'dash.devteam.club', u'addressUsed': u'', u'port': u'', u'addressesResolved': None}]
+LetsEncrypt.send: d: keyAuthorization: Lkg8f0ujm5-ESlEg7e1U3eqyeA00mt8aE9ikBtaJ794.f_y-mGhGlj24llYFTYnufeIKYqOrmPNsCqNhtx2KxQY
+LetsEncrypt.send: d: uri: https://acme-v01.api.letsencrypt.org/acme/challenge/XgkanDvs8DU3lJEbHQjj25nBf71Lb3pwBXiVEDpeQz0/354558687
+LetsEncrypt.send: d: token: Lkg8f0ujm5-ESlEg7e1U3eqyeA00mt8aE9ikBtaJ794
+LetsEncrypt.send: d: type: dns-01
+LetsEncrypt.send: d: nonce: CaOwGlsd8j6oow2ybwa2s3JFN0WB6LugYatLowjNyFs
+LetsEncrypt.send: h: Server: nginx
+LetsEncrypt.send: h: Content-Type: application/json
+LetsEncrypt.send: h: Content-Length: 654
+LetsEncrypt.send: h: Boulder-Request-Id: ytkLBCkS_jK3ZnFiJbNHakTHn6QhzZmwiiXjI7qiw0w
+LetsEncrypt.send: h: Boulder-Requester: 6384707
+LetsEncrypt.send: h: Link: <https://acme-v01.api.letsencrypt.org/acme/authz/XgkanDvs8DU3lJEbHQjj25nBf71Lb3pwBXiVEDpeQz0>;rel="up"
+LetsEncrypt.send: h: Location: https://acme-v01.api.letsencrypt.org/acme/challenge/XgkanDvs8DU3lJEbHQjj25nBf71Lb3pwBXiVEDpeQz0/354558687
+LetsEncrypt.send: h: Replay-Nonce: CaOwGlsd8j6oow2ybwa2s3JFN0WB6LugYatLowjNyFs
+LetsEncrypt.send: h: Expires: Mon, 21 Nov 2016 16:41:55 GMT
+LetsEncrypt.send: h: Cache-Control: max-age=0, no-cache, no-store
+LetsEncrypt.send: h: Pragma: no-cache
+LetsEncrypt.send: h: Date: Mon, 21 Nov 2016 16:41:55 GMT
+LetsEncrypt.send: h: Connection: close
+
+

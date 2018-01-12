@@ -1,0 +1,126 @@
+Описанный способ служит для создания SSL сертификатов подписанных невалидным CA
+(Certificate Authority). Т.е. сертификат является несампоподписным (not self-signed)
+и валидным в рамках теста приложения SSL Manager.
+
+Создание самоподписного описано ниже.
+
+Для подписания CSR нам нужно создать свой CA (Certificate Authority):
+
+1) создаем секретный ключ (private key):
+
+openssl genrsa -des3 -out ca.key -passout pass:'Temp!234' 2048
+
+[ssladmin@envy temp]$ openssl genrsa -des3 -out ca.key -passout pass:'Temp!234' 2048
+Generating RSA private key, 2048 bit long modulus
+.....................+++
+....+++
+e is 65537 (0x10001)
+
+Результат: создан CA секретный ключ ca.key в текущей директории
+
+2) генрируем сертификат
+
+openssl req -new -x509 -days 3650 -config /etc/pki/tls/openssl.cnf -extensions v3_ca -key ca.key -subj '/C=UA/O=GeeksForLess Inc./CN=CA for SSL Manager testing' -sha1 -out ca.pem
+
+Заметки:
+a) /etc/pki/tls/openssl.cnf - конфигурационный файл openssl. Например, для Red Hat подобных дистрибутивов его расположение можно найти так:
+
+    [ssladmin@envy temp]$ rpm -ql openssl.x86_64 | grep openssl\.cnf
+    /etc/pki/tls/openssl.cnf
+
+    Для debian подобных (проверено на Ubuntu дистрибутиве):
+
+    dpkg -L openssl | grep openssl\.cnf
+    
+b) внутри файла /etc/pki/tls/openssl.cnf должна существовать секция [v3_ca] в которой есть опции
+
+[ v3_ca ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+basicConstraints = CA:true
+
+(первые две могут отличаться, basicConstraints опция должна быть установленна именно таким образом)
+
+Результат: создан самоподписной (self-signed) CA сертификат ca.pem в текущей директории
+
+3) Создание сертификата на основе имеющейся CSR, подписанного нашим CA:
+
+
+openssl x509 -req -days 365 -in domain.com.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out domain.com.pem
+
+Заметки:
+
+a) опция -CAcreateserial подставляется при первом запуске команды
+
+    -CAcreateserial
+    
+    with this option the CA serial number file is created if it does not exist:
+    it will contain the serial number ``02'' and the certificate being signed will
+    have the 1 as its serial number. Normally if the -CA option is specified and
+    the serial number file does not exist it is an error.
+    
+b) domain.com.csr - CSR домена (предоставленный клиентом, т.е. сгенерированный с помощью SSL Manager)
+с) domain.com.pem - сертификат домена (который можно устанавливать в SSL Manager)
+
+Примеры:
+1) первый подписанный сертификат:
+[ssladmin@envy temp]$ openssl x509 -req -days 365 -in www.fossler.com.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out www.fossler.com.pem
+Signature ok
+subject=/C=US/ST=Minnesota/L=Shoreview/O=Deluxe/OU=Deluxe/CN=www.fossler.com/emailAddress=certadmin@deluxe.com
+Getting CA Private Key
+Enter pass phrase for ca.key:
+
+Проверяем информацию о сертификате www.fossler.com.pem:
+[ssladmin@envy temp]$ openssl x509 -subject -issuer -dates -noout -in www.fossler.com.pem
+subject= /C=US/ST=Minnesota/L=Shoreview/O=Deluxe/OU=Deluxe/CN=www.fossler.com/emailAddress=certadmin@deluxe.com
+issuer= /C=UA/O=GeeksForLess Inc./CN=CA for SSL Manager testing
+notBefore=Mar 18 16:32:47 2013 GMT
+notAfter=Mar 18 16:32:47 2014 GMT
+
+2) второй (без опции -CAcreateserial)
+
+[ssladmin@envy temp]$ openssl x509 -req -days 365 -in domain.tld.csr -CA ca.pem -CAkey ca.key -out domain.tld.pem
+Signature ok
+subject=/C=US/ST=Minnesota/L=Shoreview/O=Deluxe/OU=Deluxe/CN=domain.tld/emailAddress=certadmin@deluxe.com
+Getting CA Private Key
+Enter pass phrase for ca.key:
+
+Проверяем информацию о сертификате domain.tld.pem:
+[ssladmin@envy temp]$ openssl x509 -subject -issuer -dates -noout -in domain.tld.pem
+subject= /C=US/ST=Minnesota/L=Shoreview/O=Deluxe/OU=Deluxe/CN=domain.tld/emailAddress=certadmin@deluxe.com
+issuer= /C=UA/O=GeeksForLess Inc./CN=CA for SSL Manager testing
+notBefore=Mar 18 16:35:13 2013 GMT
+notAfter=Mar 18 16:35:13 2014 GMT
+
+
+Самоподписной сертификат создается следующей командой:
+
+openssl x509 -req -days 365 \
+    -in domain.csr \
+    -signkey domain.key \
+    -out domain.pem
+
+Заметки:
+
+1) domain.csr - CSR полученный от SSL Manager
+2) domain.key - ключ сгенерированный с помощью  /suid/make_ssl_key_csr
+3) domain.pem - самоподписной сертификат, который можно использовать в SSL Manager
+    и использование которого нужно запретить по умолчанию)
+    
+Пример:
+
+[ssladmin@envy temp]$ openssl x509 -req -days 365 -in domain.tld.csr -signkey domain.tld.key -out domain.tld.pem
+Signature ok
+subject=/C=US/ST=Minnesota/L=Shoreview/O=Deluxe/OU=Deluxe/CN=domain.tld/emailAddress=certadmin@deluxe.com
+Getting Private key
+Enter pass phrase for domain.tld.key:
+
+Проверяем информацию о сертификате domain.tld.pem (sel-signed):
+[ssladmin@envy temp]$ openssl x509 -subject -issuer -dates -noout -in domain.tld.pem
+subject= /C=US/ST=Minnesota/L=Shoreview/O=Deluxe/OU=Deluxe/CN=domain.tld/emailAddress=certadmin@deluxe.com
+issuer= /C=US/ST=Minnesota/L=Shoreview/O=Deluxe/OU=Deluxe/CN=domain.tld/emailAddress=certadmin@deluxe.com
+notBefore=Mar 18 16:58:37 2013 GMT
+notAfter=Mar 18 16:58:37 2014 GMT
+
+    
+PS: Использование сертификатов сгенерированных первым способом запретить сложнее, но также необходимо

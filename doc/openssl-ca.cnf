@@ -1,0 +1,42 @@
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate	# Where everything is kept
+new_certs_dir   = $dir/newcerts			# default place for new certs.
+database	= $dir/index.txt		# database index file.
+email_in_dn	= no				# Don't add the email into cert DN
+policy		= policy_anything
+serial          = $dir/serial			# The current serial number
+default_days	= 365
+default_md	= sha256
+private_key	= $dir/private/cakey.pem
+certificate     = $dir/cacert.pem
+
+# Add addtional extensions
+x509_extensions = usr_cert              	# The extentions to add to the cert
+
+# For the CA policy
+[ policy_anything ]
+countryName             = optional
+stateOrProvinceName     = optional
+localityName            = optional
+organizationName        = optional
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ usr_crldp_section ]
+fullname=URI:http://crl.domain.tld/crls/comssl.crl
+
+[ usr_cert ]
+authorityKeyIdentifier=keyid,issuer
+subjectKeyIdentifier=hash
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth, clientAuth
+crlDistributionPoints = usr_crldp_section
+authorityInfoAccess = OCSP;URI:http://ocsp2.domain.tld, caIssuers;URI:http://cacerts.domain.tld/comssl.crt
+basicConstraints = critical, CA:FALSE
+#subjectAltName = @alt_names
+
+[ alt_names ]

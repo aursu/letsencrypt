@@ -1,0 +1,71 @@
+      --env,        -e  - env
+      --cron,       -c  - sign_domains
+      --signcsr,    -s  - sign_csr     (PARAM_CSR)
+      --revoke,     -r  - revoke       (PARAM_REVOKECERT)
+      --cleanup,    -gc - cleanup
+      --full-chain, -fc -              (PARAM_FULL_CHAIN="1")         # Print full chain when using --signcsr
+      --ipv4,       -4  -              (PARAM_IP_VERSION="4")         # Resolve names to IPv4 addresses only
+      --ipv6,       -6  -              (PARAM_IP_VERSION="6")         # Resolve names to IPv6 addresses only
+      --domain,     -d  -              (PARAM_DOMAIN)                 # Use specified domain name(s) instead of domains.txt entry (one certificate!)
+      --keep-going, -g  -              (PARAM_KEEP_GOING="yes")       # Keep going after encountering an error while creating/renewing multiple certificates in cron mode
+      --force,      -x  -              (PARAM_FORCE="yes")            # Force renew of certificate even if it is longer valid than value in RENEW_DAYS
+      --no-lock,    -n  -              (PARAM_NO_LOCK="yes")          # Don't use lockfile (potentially dangerous!)
+      --ocsp            -              (PARAM_OCSP_MUST_STAPLE="yes") # Sets option in CSR indicating OCSP stapling to be mandatory
+      --privkey,    -p  -              (PARAM_ACCOUNT_KEY)            # Use specified private key instead of account key (useful for revocation)
+      --config,     -f  -              (CONFIG)                       # Use specified config file
+      --hook,       -k  -              (PARAM_HOOK)                   # Use specified script for hooks
+      --out,        -o  -              (PARAM_CERTDIR)                # Output certificates into the specified directory
+      --challenge,  -t  -              (PARAM_CHALLENGETYPE)          # Which challenge should be used? Currently http-01 and dns-01 are supported
+      --algo,       -a  -              (PARAM_KEY_ALGO)               # Which public key algorithm should be used? Supported: rsa, prime256v1 and secp384r1
+
+    env          -> command_env
+    sign_domains -> command_sign_domains
+    sign_csr     -> command_sign_csr "${PARAM_CSR}"
+    revoke       -> command_revoke "${PARAM_REVOKECERT}"
+    cleanup      -> command_cleanup
+    
+  CA="https://acme-v01.api.letsencrypt.org/directory"
+  LICENSE="https://letsencrypt.org/documents/LE-SA-v1.1.1-August-1-2016.pdf"
+  CERTDIR=
+  ACCOUNTDIR=
+  CHALLENGETYPE="http-01"
+  CONFIG_D=
+  DOMAINS_D=
+  DOMAINS_TXT=
+  HOOK=
+  HOOK_CHAIN="no"
+  RENEW_DAYS="30"
+  KEYSIZE="4096"
+  WELLKNOWN=
+  PRIVATE_KEY_RENEW="yes"
+  KEY_ALGO=rsa
+  OPENSSL_CNF="$(openssl version -d | cut -d\" -f2)/openssl.cnf"
+  CONTACT_EMAIL=
+  LOCKFILE=
+  OCSP_MUST_STAPLE="no"
+  IP_VERSION=
+  
+  
+  BASEDIR - is directory where located script itself or directory where config file reside (if sepcified and exists)
+
+curl -D- https://acme-v01.api.letsencrypt.org/directory
+HTTP/1.1 200 OK
+Server: nginx
+Content-Type: application/json
+Content-Length: 280
+Boulder-Request-Id: TksX97gMJ8oKRCBSt7RZD7w5xnzYUd9MpNOi_Owpwew
+Replay-Nonce: 3hZkh6e1O2YeIhVbWIUJrm1RpOBz1GRry8ThUQLyzdI
+X-Frame-Options: DENY
+Strict-Transport-Security: max-age=604800
+Expires: Fri, 04 Nov 2016 12:49:26 GMT
+Cache-Control: max-age=0, no-cache, no-store
+Pragma: no-cache
+Date: Fri, 04 Nov 2016 12:49:26 GMT
+Connection: keep-alive
+
+{
+  "new-authz": "https://acme-v01.api.letsencrypt.org/acme/new-authz",
+  "new-cert": "https://acme-v01.api.letsencrypt.org/acme/new-cert",
+  "new-reg": "https://acme-v01.api.letsencrypt.org/acme/new-reg",
+  "revoke-cert": "https://acme-v01.api.letsencrypt.org/acme/revoke-cert"
+}

@@ -1,0 +1,227 @@
+1) variable lookup failed for ca::default_ca
+139914069329824:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=ca name=default_ca
+
+-> changes:
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+
+
+2) there needs to be defined a directory for new certificate to be placed in
+139786056734624:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=new_certs_dir
+
+-> changes:
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate	# Where everything is kept
+new_certs_dir   = $dir/newcerts			# default place for new certs.
+
+3) variable lookup failed for CA_default::database
+140516495673248:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=database
+
+-> changes:
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate      # Where everything is kept
+new_certs_dir   = $dir/newcerts                 # default place for new certs.
+database        = $dir/index.txt                # database index file.
+
+4) variable lookup failed for CA_default::policy
+139915993847712:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=email_in_dn
+139915993847712:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=policy
+
+-> changes:
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate      # Where everything is kept
+new_certs_dir   = $dir/newcerts                 # default place for new certs.
+database        = $dir/index.txt                # database index file.
+email_in_dn     = no                            # Don't add the email into cert DN
+policy          = policy_anything
+
+# For the CA policy
+[ policy_anything ]
+
+5) variable lookup failed for CA_default::serial
+139676208367520:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=serial
+
+-> changes:
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate	# Where everything is kept
+new_certs_dir   = $dir/newcerts			# default place for new certs.
+database	= $dir/index.txt		# database index file.
+
+email_in_dn	= no				# Don't add the email into cert DN
+policy		= policy_anything
+serial          = $dir/serial			# The current serial number
+
+# For the CA policy
+[ policy_anything ]
+
+6) cannot lookup how many days to certify for
+140267549620128:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=default_days
+
+-> changes:
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate      # Where everything is kept
+new_certs_dir   = $dir/newcerts                 # default place for new certs.
+database        = $dir/index.txt                # database index file.
+email_in_dn     = no                            # Don't add the email into cert DN
+policy          = policy_anything
+serial          = $dir/serial                   # The current serial number
+default_days    = 365
+
+# For the CA policy
+[ policy_anything ]
+
+
+7) variable lookup failed for CA_default::default_md
+139648133244832:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=default_md
+
+-> changes
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate	# Where everything is kept
+new_certs_dir   = $dir/newcerts			# default place for new certs.
+database	= $dir/index.txt		# database index file.
+email_in_dn	= no				# Don't add the email into cert DN
+policy		= policy_anything
+serial          = $dir/serial			# The current serial number
+default_days	= 365
+default_md	= sha256
+
+# For the CA policy
+[ policy_anything ]
+
+8) variable lookup failed for CA_default::private_key
+140016802256800:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=private_key
+
+-> changes:
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate      # Where everything is kept
+new_certs_dir   = $dir/newcerts                 # default place for new certs.
+database        = $dir/index.txt                # database index file.
+email_in_dn     = no                            # Don't add the email into cert DN
+policy          = policy_anything
+serial          = $dir/serial                   # The current serial number
+default_days    = 365
+default_md      = sha256
+private_key     = $dir/private/cakey.pem
+
+# For the CA policy
+[ policy_anything ]
+
+9) variable lookup failed for CA_default::certificate
+139835935614880:error:0E06D06C:configuration file routines:NCONF_get_string:no value:conf_lib.c:335:group=CA_default name=certificate
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate      # Where everything is kept
+new_certs_dir   = $dir/newcerts                 # default place for new certs.
+database        = $dir/index.txt                # database index file.
+email_in_dn     = no                            # Don't add the email into cert DN
+policy          = policy_anything
+serial          = $dir/serial                   # The current serial number
+default_days    = 365
+default_md      = sha256
+private_key     = $dir/private/cakey.pem
+certificate     = $dir/cacert.pem
+
+# For the CA policy
+[ policy_anything ]
+
+
+Another issues
+
+1) I am unable to access the /etc/pki/CA/intermediate/newcerts directory
+/etc/pki/CA/intermediate/newcerts: No such file or directory
+
+2) unable to open '/etc/pki/CA/intermediate/index.txt'
+140026954184608:error:02001002:system library:fopen:No such file or directory:bss_file.c:398:fopen('/etc/pki/CA/intermediate/index.txt','r')
+140026954184608:error:20074002:BIO routines:FILE_CTRL:system lib:bss_file.c:400:
+
+3) /etc/pki/CA/intermediate/index.txt: No such file or directory
+unable to open '/etc/pki/CA/intermediate/index.txt'
+140026954184608:error:02001002:system library:fopen:No such file or directory:bss_file.c:398:fopen('/etc/pki/CA/intermediate/index.txt','r')
+140026954184608:error:20074002:BIO routines:FILE_CTRL:system lib:bss_file.c:400:
+
+4) /etc/pki/CA/intermediate/serial: No such file or directory
+error while loading serial number
+139676272949152:error:02001002:system library:fopen:No such file or directory:bss_file.c:398:fopen('/etc/pki/CA/intermediate/serial','r')
+139676272949152:error:20074002:BIO routines:FILE_CTRL:system lib:bss_file.c:400:
+
+5) unable to load number from /etc/pki/CA/intermediate/serial
+error while loading serial number
+140159737505696:error:0D066096:asn1 encoding routines:a2i_ASN1_INTEGER:short line:f_int.c:215:
+
+Additional changes:
+
+1) allow non-unique subject names
+it could cause openssl SEGFAULT if case of non-unique CSR  
+
+echo "unique_subject = no" > /etc/pki/CA/intermediate/index.txt.attr
+
+2) x509 extensions:
+
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = /etc/pki/CA/intermediate	# Where everything is kept
+new_certs_dir   = $dir/newcerts			# default place for new certs.
+database	= $dir/index.txt		# database index file.
+email_in_dn	= no				# Don't add the email into cert DN
+policy		= policy_anything
+serial          = $dir/serial			# The current serial number
+default_days	= 365
+default_md	= sha256
+private_key	= $dir/private/cakey.pem
+certificate     = $dir/cacert.pem
+
+# Add addtional extensions
+x509_extensions = usr_cert              	# The extentions to add to the cert
+
+# For the CA policy
+[ policy_anything ]
+
+[ usr_crldp_section ]
+fullname=URI:http://crl.domain.tld/crls/comssl.crl
+
+[ usr_cert ]
+authorityKeyIdentifier=keyid,issuer
+subjectKeyIdentifier=hash
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth, clientAuth
+crlDistributionPoints = usr_crldp_section
+authorityInfoAccess = OCSP;URI:http://ocsp2.domain.tld, caIssuers;URI:http://cacerts.domain.tld/comssl.crt
+basicConstraints = critical, CA:FALSE
+#subjectAltName = @alt_names
+
+[ alt_names ]

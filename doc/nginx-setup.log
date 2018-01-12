@@ -1,0 +1,59 @@
+1. OCSPD
+
+1) remove "ldap_ca_1" and "dbms_ldap" sections from /etc/ocspd/ocspd.conf as  we do not use LDAP,
+   remove HSM section as we do not use hardware key management (LunaCA3, LunaSA)
+
+2) add MIME type to /etc/nginx/mime.types:
+
+application/x-pkcs7-crl               crl;
+
+3) added config for crl.gamehack.com:
+
+server {
+    listen       80;
+    server_name  crl.gamehack.com;
+    root         /var/www/html;
+    
+    location / {
+        deny all;
+    }
+
+    location /crls/ghssl.crl {
+        expires 2d;
+    }
+}
+
+4) add config for OCSP daemon
+server {
+    listen       80;
+    server_name  ocsp.gamehack.com;
+
+    location / {
+        proxy_pass http://localhost:2560/;
+    }
+
+    error_log /var/log/nginx/ca.gamehack.com.error_log error;
+    access_log /var/log/nginx/ca.gamehack.com.access_log main;
+}
+
+5) add subconfig to default virtual host:
+
+set $ocsp  1;
+if ( $request_method != POST ) {
+    set $ocsp 0;
+}
+if ( $content_type !~* "application/ocsp-request" ) {
+    set $ocsp 0;
+}
+if ($ocsp) {
+    rewrite ^ /ocsp break;
+}
+location = /ocsp {
+    proxy_pass http://localhost:2560;
+}
+
+6) Add our CA certificate to trusted store:
+cp -a /etc/ssl/certs/f5e6bac4.pem /etc/pki/ca-trust/source/anchors/
+cat /etc/ssl/certs/f5e6bac4.pem  >> /etc/pki/tls/cert.pem
+update-ca-trust
+c_rehash
