@@ -1,3 +1,13 @@
+## Installation
+```
+git clone git@github.com:aursu/letsencrypt.git
+# Fedora 26
+yum install python2-pyOpenSSL
+# or CentOS
+yum install pyOpenSSL
+cd letsencrypt
+```
+
 ## Briefly: how to request certificate from Lets Encrypt
 
 * registration: `./app.py -d bsys.domain.tld -m ssladmin@domain.tld`
