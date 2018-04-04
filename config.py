@@ -6,6 +6,7 @@ import re
 from utils import BaseUtils
 import ConfigParser
 from chiffrierung import DEFAULT_KEY_SIZE
+
 # .INI (or .CNF) files support
 class Configuration(BaseUtils):
 
@@ -19,20 +20,6 @@ class Configuration(BaseUtils):
             self.path = fname
             self.load(fname)
 
-    def setOption(self, section, option, value):
-        if not self[section]:
-            # empty section
-            self[section] = {}
-        if value is None:
-            value = ""
-        self[section][option] = str(value)
-        return self[section][option]
-
-    def getOption(self, section, option):
-        if self[section] and option in self[section]:
-            return self[section][option]
-        return None
-
     # read configuration file "fname" and load its content into self object
     def load(self, fname):
         self.reset()
@@ -45,6 +32,20 @@ class Configuration(BaseUtils):
             except ConfigParser.MissingSectionHeaderError:
                 # wrong syntax of config file rejects whole file
                 return 0
+        return None
+
+    def setOption(self, section, option, value):
+        if not self[section]:
+            # empty section
+            self[section] = {}
+        if value is None:
+            value = ""
+        self[section][option] = str(value)
+        return self[section][option]
+
+    def getOption(self, section, option):
+        if self[section] and option in self[section]:
+            return self[section][option]
         return None
 
     # save data to file
@@ -67,7 +68,6 @@ class Configuration(BaseUtils):
         return len(self) == 0
 
 class DomainConfig(Configuration):
-
 
     __domain = None
 
