@@ -22,7 +22,7 @@ class LetsEncryptACME(WebResource):
 class ACMEDirectory(LetsEncryptACME):
     def __init__(self):
         super(ACMEDirectory, self).__init__()
-        self.setpath("directory")
+        self.setPath("directory")
 
 class ACMEObject(JSONParser):
 

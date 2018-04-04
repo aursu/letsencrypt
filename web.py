@@ -66,7 +66,17 @@ class HTTPMessage(UtilsCI):
             super(HTTPMessage, self).set(header, str(value))
         return self
 
-    # in case if the same header appears several times - add new value into list
+    # https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2
+    # Multiple message-header fields with the same field-name MAY be present in
+    # a message if and only if the entire field-value for that header field is
+    # defined as a comma-separated list [i.e., #(values)]. It MUST be possible
+    # to combine the multiple header fields into one "field-name: field-value"
+    # pair, without changing the semantics of the message, by appending each
+    # subsequent field-value to the first, each separated by a comma. The order
+    # in which header fields with the same field-name are received is therefore
+    # significant to the interpretation of the combined field value, and thus a
+    # proxy MUST NOT change the order of these field values when a message is
+    # forwarded.
     def add(self, h, value):
         if isinstance(h, basestring) and h:
             # headers could not be empty: no value - no header
@@ -155,6 +165,8 @@ class POSTData(WebData):
         self.__data = ""
         super(POSTData, self).reset()
 
+# WebService is object which responsible for connection using particular scheme
+# to specified port (by default - using https to 443 port)
 class WebService(object):
     __scheme = "https"
     __port = 443
@@ -184,6 +196,8 @@ class WebService(object):
             self.__port = 80
         return self
 
+# interface which provide ability to store HTTP headers and propagate them into
+# WEB request objects
 class SetupHeadersInterface(object):
 
     __headers = None
@@ -193,52 +207,56 @@ class SetupHeadersInterface(object):
         self.__headers = HTTPMessage()
 
     # Ability to have WebResource specific headers
-    def addheader(self, name, value):
-        if isinstance(value, basestring) and value:
-            self.__headers[name] = value
+    def addHeader(self, name, value):
+        self.__headers.add(name, value)
         return self
 
-    def __setupheader(self, request, name, value):
+    # setup headers into Request object
+    def __setupHeader(self, request, name, value):
+        # WebRequest is child of HTTPMessage
         if isinstance(request, WebRequest):
             request[name] = value
         elif isinstance(request, urllib2.Request):
-            request.add_header(name, value)
+            if isinstance(value, list):
+                request.add_header(name, ",".join(value))
+            else:
+                request.add_header(name, value)
 
-    # populate WebResource specific headers to into request object
-    def setupheaders(self, request):
+    def setupHeaders(self, request):
         for h in self.__headers:
-            self.__setupheader(request, h, self.__headers[h])
+            self.__setupHeader(request, h, self.__headers[h])
         return self
 
+# WebSite is object which responsible for connection to specific host/site
 class WebSite(WebService, SetupHeadersInterface):
 
     __hostname = None
 
     def __init__(self, hostname = "localhost"):
         super(WebSite, self).__init__()
-        self.sethostname(hostname)
+        self.setHost(hostname)
 
-    def geturl(self):
-        url = "%s://%s" % ( self.scheme(), self.__hostname )
-        if self.port() in ( 80, 443 ):
-            return url
-        return "%s:%s" % ( url, self.port() )
-
-    def gethost(self):
+    def getHost(self):
         return self.__hostname
 
+    def getURL(self):
+        url = "%s://%s" % (self.scheme(), self.__hostname)
+        if self.port() in (80, 443):
+            return url
+        return "%s:%s" % (url, self.port())
+
     # default hostname is "localhost", hostname should be defined for WebService
-    def sethostname(self, hostname ):
+    def setHost(self, hostname):
         if isinstance(hostname, basestring) and hostname:
             hostname = hostname.lower()
             checker = re.compile("^([a-z0-9]+([a-z0-9-]*[a-z0-9])*)((\.[a-z0-9]+([a-z0-9-]*[a-z0-9])*)*(\.([a-z]{2,}|xn--[a-z0-9]{2,})))?$", re.I)
             if checker.match(hostname) is not None:
                 self.__hostname = hostname
                 # website specific header
-                self.addheader("Host", self.__hostname)
+                self.addHeader("Host", self.__hostname)
                 return self
         self.__hostname = "localhost"
-        self.addheader("Host", "localhost")
+        self.addHeader("Host", "localhost")
         # localhost could not be secure by default
         self.secure(False)
         return self
@@ -246,17 +264,14 @@ class WebSite(WebService, SetupHeadersInterface):
 class WebResource(WebSite):
 
     __path = "/"
-    __headers = None
 
     def __init__(self, host = "localhost", path = "/"):
         super(WebResource, self).__init__(host)
-        self.setpath(path)
-        # each resource could have own set of headers
-        self.__headers = HTTPMessage()
+        self.setPath(path)
 
     def linkto(self, website):
         if isinstance(website, WebSite):
-            self.sethostname(website.gethost())
+            self.setHost(website.getHost())
             if website.scheme() == "http":
                 self.secure(False)
             self.setPort(website.port())
@@ -267,13 +282,13 @@ class WebResource(WebSite):
     def getpath(self):
         return self.__path
 
-    def geturl(self):
+    def getURL(self):
         return self.getsite() + self.__path
 
     def getsite(self):
-        return super(WebResource, self).geturl()
+        return super(WebResource, self).getURL()
 
-    def setpath(self, path):
+    def setPath(self, path):
         if isinstance(path, basestring) and path:
             self.__path = "/" + path.lstrip("/")
         else:
@@ -325,8 +340,8 @@ class WebResource(WebSite):
             if delim > 0:
                 path = path[:delim]
 
-            self.sethostname(host)
-            self.setpath(path)
+            self.setHost(host)
+            self.setPath(path)
 
             return self
         return None
@@ -389,7 +404,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
     def setData(self, data):
         self.__post.setData(data)
 
-    def geturl(self):
+    def getURL(self):
         return self._resource.getsite() + self.getpath()
 
     def setmethod(self, meth):
@@ -406,7 +421,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
         return request
 
     # update path with get parameters
-    def setpath(self, path):
+    def setPath(self, path):
         if isinstance(path, basestring) and path:
             self.__path = "/" + path.lstrip("/")
             self.setMessage("%s %s HTTP/%s" % (self.__method, self.getpath(), self.getVersion()) )
@@ -431,12 +446,12 @@ class WebRequest(HTTPMessage, WebResourceInterface):
 
     def linkto(self, webresource):
         super(WebRequest, self).linkto(webresource)
-        self.setpath(self._resource.getpath())
+        self.setPath(self._resource.getpath())
         return self
 
     def unlink(self):
         super(WebRequest, self).unlink()
-        self.setpath("/")
+        self.setPath("/")
         return self
 
     # returns urllib2.Request object
@@ -446,7 +461,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
             self.linkto(webresource)
 
         # prepare urllib2.Request object
-        r = urllib2.Request(self.geturl())
+        r = urllib2.Request(self.getURL())
 
         # propagate headers
         for h in self:
@@ -616,7 +631,7 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
             raise TypeError("Inappropriate argument type for web request.")
 
         # setup request headers
-        self.setupheaders(webrequest)
+        self.setupHeaders(webrequest)
 
         u2request = webrequest.prepare(self._resource)
 
@@ -640,11 +655,11 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
 
         return self
 
-    def setupheaders(self, request):
+    def setupHeaders(self, request):
         # if web resource has own specific headers
-        self._resource.setupheaders(request)
+        self._resource.setupHeaders(request)
         # setup browser specific headers
-        return super(WebClient, self).setupheaders(request)
+        return super(WebClient, self).setupHeaders(request)
 
     def getStatus(self):
         return self.__response.getstatus()
@@ -654,25 +669,25 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
 
     def __setCookies(self):
         self.savecookies()
-        cookiesfile = COOKIESDIR + "/" + self._resource.gethost() + ".txt"
+        cookiesfile = COOKIESDIR + "/" + self._resource.getHost() + ".txt"
         self.__cookies = cookielib.LWPCookieJar(cookiesfile)
         if os.path.isfile(cookiesfile):
             self.__cookies.load()
 
     def setUA(self, value):
-        return self.addheader("User-Agent", value)
+        return self.addHeader("User-Agent", value)
 
     def setMTypes(self, value):
-        return self.addheader("Accept", value)
+        return self.addHeader("Accept", value)
 
     def setConn(self, value = "keep-alive"):
-        return self.addheader("Connection", value)
+        return self.addHeader("Connection", value)
 
     def setLang(self, value):
-        return self.addheader("Accept-Language", value)
+        return self.addHeader("Accept-Language", value)
 
     def setEnc(self, value):
-        return self.addheader("Accept-Encoding", value)
+        return self.addHeader("Accept-Encoding", value)
 
     def savecookies(self):
         if isinstance(self.__cookies, cookielib.CookieJar):
@@ -693,9 +708,9 @@ class GoogleChrome(WebClient):
         self.setLang("en-US,en;q=0.8")
         self.setEnc("gzip, deflate, sdch")
         # Google Chrome specific
-        self.addheader("Upgrade-Insecure-Requests", "1")
-        self.addheader("Cache-Control", "no-cache")
-        self.addheader("Pragma", "no-cache")
+        self.addHeader("Upgrade-Insecure-Requests", "1")
+        self.addHeader("Cache-Control", "no-cache")
+        self.addHeader("Pragma", "no-cache")
 
 class GoogleChromeWindows(GoogleChrome):
 
