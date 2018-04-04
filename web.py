@@ -17,12 +17,12 @@ class HTTPMessage(UtilsCI):
 
     __message = None
     __body = None
-    _version = "1.1"    # HTTP version
+    __version = "1.1"    # HTTP version
 
     def __init__(self):
         super(HTTPMessage,self).__init__()
 
-    def getmessage(self):
+    def getMessage(self):
         return self.__message
 
     def getBody(self):
@@ -34,9 +34,11 @@ class HTTPMessage(UtilsCI):
             return len(self.__body)
         return 0
 
-    def getversion(self):
-        return self._version
+    # return HTTP version
+    def getVersion(self):
+        return self.__version
 
+    # set HTTP header
     def set(self, header, value):
         # headers could not be empty: no value - no header
         if value or isinstance(value, int):
@@ -46,19 +48,19 @@ class HTTPMessage(UtilsCI):
     def add(self, h, value):
         if isinstance(h, basestring) and len(h):
             # headers could not be empty: no value - no header
-            if value:
-                # headers names are case-insensitive data
+            if value or isinstance(value, int):
+                # headers names are case-insensitive
                 if h in self:
                     if isinstance(self[h], list):
-                        self[h] += [ str(value) ]
+                        self[h] += [str(value)]
                     else:
-                        header = [ self[h], str(value) ]
+                        header = [self[h], str(value)]
                         super(HTTPMessage, self).set(h, header)
                 else:
                     self.set(h, value)
         return self
 
-    def setmessage(self, data):
+    def setMessage(self, data):
         if isinstance(data, basestring) and len(data):
             self.__message = data
         return self
@@ -71,11 +73,11 @@ class HTTPMessage(UtilsCI):
     def setversion(self, version):
         if isinstance(version, basestring) and version:
             if version in ("1.0", 1, 1.0 ):
-                self._version = "1.0"
+                self.__version = "1.0"
             if version in ("1.1", 1.1 ):
-                self._version = "1.1"
+                self.__version = "1.1"
             elif version in (2, "2.0", "2"):
-                self._version = "2"
+                self.__version = "2"
         return self
 
     def reset(self):
@@ -401,7 +403,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
     def setpath(self, path):
         if isinstance(path, basestring) and path:
             self.__path = "/" + path.lstrip("/")
-            self.setmessage("%s %s HTTP/%s" % (self.__method, self.getpath(), self._version) )
+            self.setMessage("%s %s HTTP/%s" % (self.__method, self.getpath(), self.getVersion()) )
         return self
 
     def addPOST(self, name, value):
@@ -505,7 +507,7 @@ class WebResponse(HTTPMessage):
         if isinstance(phrase, basestring) and phrase:
             self.__reason = phrase
             if self.__status:
-                self.setmessage("HTTP/%s %s %s" % (self._version, self.__status, self.__reason))
+                self.setMessage("HTTP/%s %s %s" % (self.getVersion(), self.__status, self.__reason))
         return self
 
     def setstatus(self, code):
@@ -522,7 +524,7 @@ class WebResponse(HTTPMessage):
         # check if provided code message is known to us
         # at least known to python (https://docs.python.org/2/library/httplib.html)
         if self.__status and self.__status in httplib.responses:
-            self.setmessage("HTTP/%s %s %s" % (self._version, self.__status, httplib.responses[self.__status]))
+            self.setMessage("HTTP/%s %s %s" % (self.getVersion(), self.__status, httplib.responses[self.__status]))
         return self
 
     def populate(self, response):
