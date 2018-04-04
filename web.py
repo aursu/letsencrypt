@@ -65,7 +65,7 @@ class HTTPMessage(UtilsCI):
             self.__message = data
         return self
 
-    def setbody(self, data):
+    def setBody(self, data):
         if isinstance(data, basestring) and len(data):
             self.__body = data
         return self
@@ -447,15 +447,15 @@ class WebRequest(HTTPMessage, WebResourceInterface):
             r.add_header(h, self[h])
 
         # propagate body from POST data
-        self.setbody()
+        self.setBody()
         if self.bodySize():
             r.add_data(self.getBody())
 
         return self.__setmethod(r)
 
-    def setbody(self):
+    def setBody(self):
         # Raw data if set or URL-Encoded data if not
-        return super(WebRequest, self).setbody(self.__post.getData())
+        return super(WebRequest, self).setBody(self.__post.getData())
 
     # http://www.amazon.com/review/product/B00OO3OZYG?SubscriptionId=AKIAJYAW23VXUFYJ3XCQ&tag=nkawus-20&linkCode=xm2&camp=2025&creative=386001&creativeASIN=B00OO3OZYG
     def seturl(self, url):
@@ -555,11 +555,11 @@ class WebResponse(HTTPMessage):
                 # submit request again
                 # try:
                 #     d = response.read()
-                #     self.setbody(d)
+                #     self.setBody(d)
                 # except socket.timeout:
                 #     pass
                 d = response.read()
-                self.setbody(d)
+                self.setBody(d)
             except AttributeError:
                 pass
         return self
@@ -569,12 +569,12 @@ class WebResponse(HTTPMessage):
         self.__reason = None
         super(WebResponse, self).reset()
 
-    def setbody(self, data):
+    def setBody(self, data):
         # check if data gzip-compressed
         # \x1f\x8b is gzip (deflate) magic number
         if isinstance(data, basestring) and len(data) > 2 and data[:2] == "\x1f\x8b":
             data = self.__gunzip(data)
-        return super(WebResponse, self).setbody(data)
+        return super(WebResponse, self).setBody(data)
 
     def __gunzip(self, data):
         gzfile = StringIO(data)
