@@ -88,7 +88,7 @@ class HTTPMessage(UtilsCI):
         self.__version = "1.1"
         super(HTTPMessage, self).reset()
 
-# POST or GET key-value parameterss
+# POST or GET key-value parameters
 class WebData(UtilsCI):
 
     def __init__(self):
@@ -125,6 +125,7 @@ class WebData(UtilsCI):
             return encdata[1:]
         return encdata
 
+# POST data could be not only key-value but Raw as well
 class POSTData(WebData):
     """ Add ability to store Raw data (not only Key-Value) inside POST object
     If both Raw and Key-Value exist - Raw has higher priority (Key-Value data
@@ -155,32 +156,32 @@ class POSTData(WebData):
         super(POSTData, self).reset()
 
 class WebService(object):
-    _scheme = "https" # protected: accessible from derived classes
-    _port = 443       # protected: accessible from derived classes
+    __scheme = "https"
+    __port = 443
 
     def __init__(self):
         super(WebService, self).__init__()
 
     def scheme(self):
-        return self._scheme
+        return self.__scheme
 
     def port(self):
-        return self._port
+        return self.__port
 
     def secure(self, flag = True):
         if isinstance(flag, bool) and not flag:
-            self._scheme = "http"
+            self.__scheme = "http"
         else:
-            self._scheme = "https"
+            self.__scheme = "https"
         return self
 
-    def setport(self, port = 0):
+    def setPort(self, port = 0):
         if isinstance(port, int) and port >= 1 and port <= 65535:
-            self._port = port
+            self.__port = port
         elif self.scheme() == "https":
-            self._port = 443
+            self.__port = 443
         else:
-            self._port = 80
+            self.__port = 80
         return self
 
 class SetupHeadersInterface(object):
@@ -218,10 +219,10 @@ class WebSite(WebService, SetupHeadersInterface):
         self.sethostname(hostname)
 
     def geturl(self):
-        url = "%s://%s" % ( self._scheme, self.__hostname )
-        if self._port in ( 80, 443 ):
+        url = "%s://%s" % ( self.scheme(), self.__hostname )
+        if self.port() in ( 80, 443 ):
             return url
-        return "%s:%s" % ( url, self._port )
+        return "%s:%s" % ( url, self.port() )
 
     def gethost(self):
         return self.__hostname
@@ -258,7 +259,7 @@ class WebResource(WebSite):
             self.sethostname(website.gethost())
             if website.scheme() == "http":
                 self.secure(False)
-            self.setport(website.port())
+            self.setPort(website.port())
         else:
             raise TypeError("Inappropriate argument type for website.")
         return self
