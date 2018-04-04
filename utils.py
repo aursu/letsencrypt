@@ -31,7 +31,7 @@ class Utils(object):
         self.__idx = 0
 
     def set(self, key, value):
-        if isinstance(key, basestring) and len(key):
+        if isinstance(key, basestring) and key:
             self.__defs[key] = value
             if key not in self.__keys:
                 self.__keys += [key]
@@ -59,6 +59,10 @@ class Utils(object):
     def __len__(self):
         return len(self.__keys)
 
+    # in case if __len__ redefined - count() should keep iteration working
+    def count(self):
+        return len(self.__keys)
+
     def __contains__(self, key):
         return key in self.__keys
 
@@ -68,7 +72,7 @@ class Utils(object):
         return self
 
     def next(self):
-        if self.__idx == len(self):
+        if self.__idx == self.count():
             raise StopIteration
         self.__idx += 1
         return self.__keys[self.__idx - 1]
@@ -94,7 +98,7 @@ class UtilsCI(object):
         self.__idx = 0
 
     def set(self, key, value):
-        if isinstance(key, basestring) and len(key):
+        if isinstance(key, basestring) and key:
             if key.lower() not in self.__defs:
                 self.__keys += [key]
             self.__defs[key.lower()] = value
@@ -122,6 +126,10 @@ class UtilsCI(object):
     def __len__(self):
         return len(self.__keys)
 
+    # in case if __len__ redefined - count() should keep iteration working
+    def count(self):
+        return len(self.__keys)
+
     def __contains__(self, key):
         return key.lower() in self.__defs
 
@@ -131,7 +139,7 @@ class UtilsCI(object):
         return self
 
     def next(self):
-        if self.__idx == len(self):
+        if self.__idx == self.count():
             raise StopIteration
         self.__idx += 1
         return self.__keys[self.__idx - 1]
