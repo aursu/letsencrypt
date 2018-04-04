@@ -25,6 +25,11 @@ class HTTPMessage(UtilsCI):
     def getMessage(self):
         return self.__message
 
+    def setMessage(self, data):
+        if isinstance(data, basestring) and len(data):
+            self.__message = data
+        return self
+
     def getBody(self):
         return self.__body
 
@@ -34,19 +39,36 @@ class HTTPMessage(UtilsCI):
             return len(self.__body)
         return 0
 
+    def setBody(self, data):
+        if isinstance(data, basestring) and len(data):
+            self.__body = data
+        return self
+
     # return HTTP version
     def getVersion(self):
         return self.__version
 
+    def setVersion(self, version):
+        if isinstance(version, basestring) and version:
+            if version in ("1.0", 1, 1.0):
+                self.__version = "1.0"
+            if version in ("1.1", 1.1):
+                self.__version = "1.1"
+            elif version in ("2", "2.0", 2):
+                self.__version = "2"
+        return self
+
     # set HTTP header
     def set(self, header, value):
         # headers could not be empty: no value - no header
+        # support integer 0 as wells
         if value or isinstance(value, int):
             super(HTTPMessage, self).set(header, str(value))
         return self
 
+    # in case if the same header appears several times - add new value into list
     def add(self, h, value):
-        if isinstance(h, basestring) and len(h):
+        if isinstance(h, basestring) and h:
             # headers could not be empty: no value - no header
             if value or isinstance(value, int):
                 # headers names are case-insensitive
@@ -60,41 +82,23 @@ class HTTPMessage(UtilsCI):
                     self.set(h, value)
         return self
 
-    def setMessage(self, data):
-        if isinstance(data, basestring) and len(data):
-            self.__message = data
-        return self
-
-    def setBody(self, data):
-        if isinstance(data, basestring) and len(data):
-            self.__body = data
-        return self
-
-    def setversion(self, version):
-        if isinstance(version, basestring) and version:
-            if version in ("1.0", 1, 1.0 ):
-                self.__version = "1.0"
-            if version in ("1.1", 1.1 ):
-                self.__version = "1.1"
-            elif version in (2, "2.0", "2"):
-                self.__version = "2"
-        return self
-
     def reset(self):
         self.__message = None
         self.__body = None
+        self.__version = "1.1"
         super(HTTPMessage, self).reset()
 
+# POST or GET key-value parameterss
 class WebData(UtilsCI):
 
     def __init__(self):
         super(WebData, self).__init__()
 
-    def set(self, header, value):
+    # python None is empty string s
+    def set(self, key, value):
         if value is None:
             value = ""
-        # headers could not be empty: no value - no header
-        super(WebData, self).set(header, str(value))
+        super(WebData, self).set(key, str(value))
         return self
 
     def getRaw(self):
@@ -138,12 +142,13 @@ class POSTData(WebData):
     def getData(self):
         if len(self):
             return self.__data
-        # default is return URL-Encoded POST data
+        # default is return URL-Encoded POST data if no Raw data set
         return self.getURLEncoded()
 
     def setData(self, data):
-        if isinstance(data,  basestring) and len(data):
+        if isinstance(data,  basestring) and data:
             self.__data = data
+        return self
 
     def reset(self):
         self.__data = ""
