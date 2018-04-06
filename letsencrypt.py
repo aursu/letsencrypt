@@ -63,7 +63,7 @@ class LetsEncryptResource(ACMEObject, WebInterface):
 
         if isinstance(url, basestring) and url:
 #            print "LetsEncryptResource.__init__: url: %s" % url
-            self.seturl(url)
+            self.setURL(url)
 
     def getName(self):
         return self.__name
@@ -75,7 +75,7 @@ class LetsEncryptResource(ACMEObject, WebInterface):
     # nonce should be always up to date, therefore parameter response provides
     # posibility to set nonce based on another operation response
     def getNonce(self, response = None):
-        self.request.setmethod("HEAD")
+        self.request.setMethod("HEAD")
         response = self.sendRequest()
         if not response:
             return None
@@ -83,7 +83,7 @@ class LetsEncryptResource(ACMEObject, WebInterface):
         return self["nonce"]
 
     def send(self, data = None ):
-        self.request.setmethod("GET")
+        self.request.setMethod("GET")
         response = self.sendRequest(data)
         # if request was failed, status is not set
         if not isinstance(response, WebResponse):
