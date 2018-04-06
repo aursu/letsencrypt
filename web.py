@@ -15,19 +15,26 @@ SOCKTIMEOUT = 5
 
 class HTTPMessage(UtilsCI):
 
-    __message = None
+    # An HTTP message can be either a request from client to server or a
+    # response from server to client.  Syntactically, the two types of message
+    # differ only in the start-line, which is either a request-line (for
+    # requests) or a status-line (for responses)
+    # https://tools.ietf.org/html/rfc7230#section-3.1
+    __startLine = None
+
+    # https://tools.ietf.org/html/rfc7230#section-3.3
     __body = None
-    __version = "1.1"    # HTTP version
+    __version = "1.1"    # HTTP-version
 
     def __init__(self):
         super(HTTPMessage,self).__init__()
 
-    def getMessage(self):
-        return self.__message
+    def startLine(self):
+        return self.__startLine
 
-    def setMessage(self, data):
-        if isinstance(data, basestring) and len(data):
-            self.__message = data
+    def setStartLine(self, data):
+        if isinstance(data, basestring) and data:
+            self.__startLine = data
         return self
 
     def getBody(self):
@@ -49,7 +56,8 @@ class HTTPMessage(UtilsCI):
         return self.__version
 
     def setVersion(self, version):
-        if isinstance(version, basestring) and version:
+        if (isinstance(version, basestring) and version) or \
+                                                    version in (1, 1.0, 1.1, 2):
             if version in ("1.0", 1, 1.0):
                 self.__version = "1.0"
             if version in ("1.1", 1.1):
@@ -93,7 +101,7 @@ class HTTPMessage(UtilsCI):
         return self
 
     def reset(self):
-        self.__message = None
+        self.__startLine = None
         self.__body = None
         self.__version = "1.1"
         super(HTTPMessage, self).reset()
@@ -261,6 +269,8 @@ class WebSite(WebService, SetupHeadersInterface):
         self.secure(False)
         return self
 
+# WebResource is object which responsible for connection to separate URL path on
+# Web site
 class WebResource(WebSite):
 
     __path = "/"
@@ -269,7 +279,18 @@ class WebResource(WebSite):
         super(WebResource, self).__init__(host)
         self.setPath(path)
 
-    def linkto(self, website):
+    def getPath(self):
+        return self.__path
+
+    def setPath(self, path):
+        if isinstance(path, basestring) and path:
+            self.__path = "/" + path.lstrip("/")
+        else:
+            self.__path = "/"
+        return self
+
+    # support for linkig WebSite into WebResource
+    def linkTo(self, website):
         if isinstance(website, WebSite):
             self.setHost(website.getHost())
             if website.scheme() == "http":
@@ -279,26 +300,18 @@ class WebResource(WebSite):
             raise TypeError("Inappropriate argument type for website.")
         return self
 
-    def getpath(self):
-        return self.__path
-
-    def getURL(self):
-        return self.getsite() + self.__path
-
-    def getsite(self):
+    # return URL of Web site we connect to (ie https://domain.com)
+    def getSiteURL(self):
         return super(WebResource, self).getURL()
 
-    def setPath(self, path):
-        if isinstance(path, basestring) and path:
-            self.__path = "/" + path.lstrip("/")
-        else:
-            self.__path = "/"
-        return self
-
-    def addcomponent(self, subpath):
+    def addComponent(self, subpath):
         if isinstance(subpath, basestring) and subpath:
             self.__path = self.__path.rstrip("/") + "/" +  subpath.lstrip("/")
         return self
+
+    # return Web resource URL (ie https://domain.com/some/path)
+    def getURL(self):
+        return self.getSiteURL() + self.__path
 
     # Web resource URL parser
     # Expected are:
@@ -306,7 +319,7 @@ class WebResource(WebSite):
     # https://domain.tld/resource?parameters#fragment
     # domain.tld/resource?parameters#fragment
     # default path - "/"
-    def seturl(self, webresource):
+    def setURL(self, webresource):
         if isinstance(webresource, basestring) and webresource:
             url = webresource.lower()
 
@@ -342,43 +355,42 @@ class WebResource(WebSite):
 
             self.setHost(host)
             self.setPath(path)
-
-            return self
-        return None
+        return self
 
 class WebResourceInterface(object):
 
-    _resource = None
+    __resource = None
 
     def __init__(self):
         super(WebResourceInterface, self).__init__()
 
-    def linkto(self, webresource):
+    def linkTo(self, webresource):
         if isinstance(webresource, WebResource):
-            self._resource = webresource
+            self.__resource = webresource
         elif isinstance(webresource, basestring) and webresource:
-            self._resource = WebResource()
-            self._resource.seturl(webresource)
+            self.__resource = WebResource()
+            self.__resource.setURL(webresource)
         else:
             raise TypeError("Inappropriate argument type for web resource.")
         return self
 
-    def getres(self):
-        return self._resource
+    def resource(self):
+        return self.__resource
 
     def unlink(self):
-        self._resource = None
+        self.__resource = None
         return self
 
     def __del__(self):
         pass
 
-# WebRequest should contain
+# WebRequest should know WebResource to which it will be submitted
 class WebRequest(HTTPMessage, WebResourceInterface):
     __method = "GET"
     __get = None
     __post = None
 
+    # we can not compile WEB Request withouth URL path
     __path = "/"
 
     def __init__(self):
@@ -386,16 +398,32 @@ class WebRequest(HTTPMessage, WebResourceInterface):
         self.__post = POSTData()
         self.__get = WebData()
 
-    def getpath(self):
-        # we do not want to add this to path (and therefore duplicate data)
-        if self.__get.getRaw():
-            return self.__path + "?" + self.__get.getURLEncoded()
-        return self.__path
+    def __updateMessage(self):
+        self.setStartLine("%s %s HTTP/%s" % (self.__method, self.getPath(), self.getVersion()))
 
-    def getmethod(self):
+    def __setMethod(self, request):
+        # default methods should not be handled
+        if self.__method not in ( "GET", "POST" ):
+            if isinstance(request, urllib2.Request):
+                request.get_method = lambda : self.__method
+        return request
+
+    def setVersion(self, version):
+        super(WebRequest, self).setVersion(version)
+        self.__updateMessage()
+        return self
+
+    def getMethod(self):
         return self.__method
 
-    def getparams(self):
+    def setMethod(self, meth):
+        if isinstance(meth, basestring) and meth:
+            if meth.upper() in ( "GET", "POST", "HEAD" ):
+                self.__method = meth.upper()
+                self.__updateMessage()
+        return self
+
+    def getParams(self):
         return self.__get
 
     def getData(self):
@@ -404,49 +432,45 @@ class WebRequest(HTTPMessage, WebResourceInterface):
     def setData(self, data):
         self.__post.setData(data)
 
-    def getURL(self):
-        return self._resource.getsite() + self.getpath()
+    def getPath(self):
+        # we do not want to add this to path (and therefore duplicate data)
+        if self.__get.getRaw():
+            return self.__path + "?" + self.__get.getURLEncoded()
+        return self.__path
 
-    def setmethod(self, meth):
-        if isinstance(meth, basestring) and meth:
-            if meth.upper() in ( "GET", "POST", "HEAD" ):
-                self.__method = meth.upper()
-        return self
-
-    def __setmethod(self, request):
-        # default methods should not be handled
-        if self.__method not in ( "GET", "POST" ):
-            if isinstance(request, urllib2.Request):
-                request.get_method = lambda : self.__method
-        return request
-
-    # update path with get parameters
     def setPath(self, path):
         if isinstance(path, basestring) and path:
             self.__path = "/" + path.lstrip("/")
-            self.setMessage("%s %s HTTP/%s" % (self.__method, self.getpath(), self.getVersion()) )
+            self.__updateMessage()
         return self
+
+    def getURL(self):
+        if self.resource():
+            return self.resource().getSiteURL() + self.getPath()
+        return None
 
     def addPOST(self, name, value):
         self.__post[name] = value
-        self.setmethod("POST")
+        self.setMethod("POST")
         return self
 
     def addGET(self, name, value):
         self.__get[name] = value
+        self.__updateMessage()
         return self
 
     def delGET(self, name):
         del self.__get[name]
+        self.__updateMessage()
         return self
 
     def delPOST(self, name):
         del self.__post[name]
         return self
 
-    def linkto(self, webresource):
-        super(WebRequest, self).linkto(webresource)
-        self.setPath(self._resource.getpath())
+    def linkTo(self, webresource):
+        super(WebRequest, self).linkTo(webresource)
+        self.setPath(self.resource().getPath())
         return self
 
     def unlink(self):
@@ -458,7 +482,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
     def prepare(self, webresource = None):
         # link request to provided resource if specified
         if webresource:
-            self.linkto(webresource)
+            self.linkTo(webresource)
 
         # prepare urllib2.Request object
         r = urllib2.Request(self.getURL())
@@ -472,14 +496,14 @@ class WebRequest(HTTPMessage, WebResourceInterface):
         if self.bodySize():
             r.add_data(self.getBody())
 
-        return self.__setmethod(r)
+        return self.__setMethod(r)
 
     def setBody(self):
         # Raw data if set or URL-Encoded data if not
         return super(WebRequest, self).setBody(self.__post.getData())
 
     # http://www.amazon.com/review/product/B00OO3OZYG?SubscriptionId=AKIAJYAW23VXUFYJ3XCQ&tag=nkawus-20&linkCode=xm2&camp=2025&creative=386001&creativeASIN=B00OO3OZYG
-    def seturl(self, url):
+    def setURL(self, url):
         if isinstance(url, basestring) and url:
             request = None
             if "?" in url:
@@ -496,13 +520,13 @@ class WebRequest(HTTPMessage, WebResourceInterface):
                         n, v = p.split("=", 1)
                     self.addGET(urllib2.unquote(n), urllib2.unquote(v))
             # check if resource alredy linked to request
-            if self._resource:
-                self._resource.seturl(url)
-                # we need relink resource becase linkto operation has custom
+            if self.resource():
+                self.resource().setURL(url)
+                # we need relink resource becase linkTo operation has custom
                 # rules for most web requests objects
-                self.linkto(self._resource)
+                self.linkTo(self.resource())
             else:
-                self.linkto(url)
+                self.linkTo(url)
             return self
         return None
 
@@ -528,7 +552,7 @@ class WebResponse(HTTPMessage):
         if isinstance(phrase, basestring) and phrase:
             self.__reason = phrase
             if self.__status:
-                self.setMessage("HTTP/%s %s %s" % (self.getVersion(), self.__status, self.__reason))
+                self.setStartLine("HTTP/%s %s %s" % (self.getVersion(), self.__status, self.__reason))
         return self
 
     def setstatus(self, code):
@@ -545,7 +569,7 @@ class WebResponse(HTTPMessage):
         # check if provided code message is known to us
         # at least known to python (https://docs.python.org/2/library/httplib.html)
         if self.__status and self.__status in httplib.responses:
-            self.setMessage("HTTP/%s %s %s" % (self.getVersion(), self.__status, httplib.responses[self.__status]))
+            self.setStartLine("HTTP/%s %s %s" % (self.getVersion(), self.__status, httplib.responses[self.__status]))
         return self
 
     def populate(self, response):
@@ -615,7 +639,7 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
         self.__response = WebResponse()
 
     def setAddress(self, webresource):
-        super(WebClient, self).linkto(webresource)
+        super(WebClient, self).linkTo(webresource)
         # setup cookies
         self.__setCookies()
         # setup opener object to use cookies
@@ -625,7 +649,7 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
     # return urllib2 response object if request was successfull
     # return None if fail
     def sendRequest(self, webrequest):
-        if not self._resource:
+        if not self.resource():
             raise ValueError("Web address is not specified. Use setAddress() to define it.")
         if not isinstance(webrequest, WebRequest):
             raise TypeError("Inappropriate argument type for web request.")
@@ -633,7 +657,7 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
         # setup request headers
         self.setupHeaders(webrequest)
 
-        u2request = webrequest.prepare(self._resource)
+        u2request = webrequest.prepare(self.resource())
 
         u2response = None
         # reset response object to avoid undefined behavior in case of failed request
@@ -657,7 +681,7 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
 
     def setupHeaders(self, request):
         # if web resource has own specific headers
-        self._resource.setupHeaders(request)
+        self.resource().setupHeaders(request)
         # setup browser specific headers
         return super(WebClient, self).setupHeaders(request)
 
@@ -669,7 +693,7 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
 
     def __setCookies(self):
         self.savecookies()
-        cookiesfile = COOKIESDIR + "/" + self._resource.getHost() + ".txt"
+        cookiesfile = COOKIESDIR + "/" + self.resource().getHost() + ".txt"
         self.__cookies = cookielib.LWPCookieJar(cookiesfile)
         if os.path.isfile(cookiesfile):
             self.__cookies.load()
@@ -733,9 +757,9 @@ class WebInterface(object):
         # set data if provided (Raw data - non-POST)
         self.request.setData(data)
 
-        self.request.linkto(self.resource)
+        self.request.linkTo(self.resource)
 
-        self.ua.setAddress(self.request.getres())
+        self.ua.setAddress(self.request.resource())
         self.ua.sendRequest(self.request)
 
         resp = self.ua.getResponse()
@@ -751,10 +775,10 @@ class WebInterface(object):
         self.resource = WebResource()
         self.request = WebRequest()
 
-    def seturl(self, url):
+    def setURL(self, url):
         if isinstance(url, basestring) and url:
-            self.resource.seturl(url)
-            self.request.seturl(url)
+            self.resource.setURL(url)
+            self.request.setURL(url)
 
     def __del__(self):
         pass
