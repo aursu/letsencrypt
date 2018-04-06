@@ -74,17 +74,24 @@ class HTTPMessage(UtilsCI):
             super(HTTPMessage, self).set(header, str(value))
         return self
 
-    # https://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2
-    # Multiple message-header fields with the same field-name MAY be present in
-    # a message if and only if the entire field-value for that header field is
-    # defined as a comma-separated list [i.e., #(values)]. It MUST be possible
-    # to combine the multiple header fields into one "field-name: field-value"
-    # pair, without changing the semantics of the message, by appending each
-    # subsequent field-value to the first, each separated by a comma. The order
-    # in which header fields with the same field-name are received is therefore
-    # significant to the interpretation of the combined field value, and thus a
-    # proxy MUST NOT change the order of these field values when a message is
-    # forwarded.
+    # https://tools.ietf.org/html/rfc7230#section-3.2.2
+    # A sender MUST NOT generate multiple header fields with the same field name
+    # in a message unless either the entire field value for that header field is
+    # defined as a comma-separated list [i.e., #(values)] or the header field is
+    # a well-known exception (as noted below).
+    # A recipient MAY combine multiple header fields with the same field name
+    # into one "field-name: field-value" pair, without changing the semantics of
+    # the message, by appending each subsequent field value to the combined
+    # field value in order, separated by a comma.  The order in which header
+    # fields with the same field name are received is therefore significant to
+    # the interpretation of the combined field value; a proxy MUST NOT change
+    # the order of these field values when forwarding a message.
+    #   Note: In practice, the "Set-Cookie" header field ([RFC6265]) often
+    #   appears multiple times in a response message and does not use the list
+    #   syntax, violating the above requirements on multiple header fields with
+    #   the same name.  Since it cannot be combined into a single field-value,
+    #   recipients ought to handle "Set-Cookie" as a special case while
+    #   processing header fields.
     def add(self, h, value):
         if isinstance(h, basestring) and h:
             # headers could not be empty: no value - no header
@@ -238,6 +245,10 @@ class SetupHeadersInterface(object):
 # WebSite is object which responsible for connection to specific host/site
 class WebSite(WebService, SetupHeadersInterface):
 
+    # The host subcomponent of authority is identified by an IP literal
+    # encapsulated within square brackets, an IPv4 address in dotted-decimal
+    # form, or a registered name.  The host subcomponent is case-insensitive.
+    # https://tools.ietf.org/html/rfc3986#section-3.2.2
     __hostname = None
 
     def __init__(self, hostname = "localhost"):
@@ -254,6 +265,7 @@ class WebSite(WebService, SetupHeadersInterface):
         return "%s:%s" % (url, self.port())
 
     # default hostname is "localhost", hostname should be defined for WebService
+    # supported only registered names (no IPv4 or IPv6)
     def setHost(self, hostname):
         if isinstance(hostname, basestring) and hostname:
             hostname = hostname.lower()
@@ -273,13 +285,19 @@ class WebSite(WebService, SetupHeadersInterface):
 # Web site
 class WebResource(WebSite):
 
+    # The path component contains data, usually organized in hierarchical form,
+    # that, along with data in the non-hierarchical query component (Section
+    # 3.4), serves to identify a resource within the scope of the URI's scheme
+    # and naming authority (if any).  The path is terminated by the first
+    # question mark ("?") or number sign ("#") character, or by the end of the
+    # URI. (https://tools.ietf.org/html/rfc3986#section-3.3)
     __path = "/"
 
     def __init__(self, host = "localhost", path = "/"):
         super(WebResource, self).__init__(host)
         self.setPath(path)
 
-    def getPath(self):
+    def path(self):
         return self.__path
 
     def setPath(self, path):
@@ -304,7 +322,7 @@ class WebResource(WebSite):
     def getSiteURL(self):
         return super(WebResource, self).getURL()
 
-    def addComponent(self, subpath):
+    def addSegment(self, subpath):
         if isinstance(subpath, basestring) and subpath:
             self.__path = self.__path.rstrip("/") + "/" +  subpath.lstrip("/")
         return self
@@ -390,16 +408,13 @@ class WebRequest(HTTPMessage, WebResourceInterface):
     __get = None
     __post = None
 
-    # we can not compile WEB Request withouth URL path
-    __path = "/"
-
     def __init__(self):
         super(WebRequest, self).__init__()
         self.__post = POSTData()
         self.__get = WebData()
 
-    def __updateMessage(self):
-        self.setStartLine("%s %s HTTP/%s" % (self.__method, self.getPath(), self.getVersion()))
+    def __updateRequestLine(self):
+        self.setStartLine("%s %s HTTP/%s" % (self.__method, self.path(), self.getVersion()))
 
     def __setMethod(self, request):
         # default methods should not be handled
@@ -410,7 +425,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
 
     def setVersion(self, version):
         super(WebRequest, self).setVersion(version)
-        self.__updateMessage()
+        self.__updateRequestLine()
         return self
 
     def getMethod(self):
@@ -420,7 +435,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
         if isinstance(meth, basestring) and meth:
             if meth.upper() in ( "GET", "POST", "HEAD" ):
                 self.__method = meth.upper()
-                self.__updateMessage()
+                self.__updateRequestLine()
         return self
 
     def getParams(self):
@@ -432,21 +447,24 @@ class WebRequest(HTTPMessage, WebResourceInterface):
     def setData(self, data):
         self.__post.setData(data)
 
-    def getPath(self):
+    def path(self):
+        path = "/"
+        if self.resource():
+            path = self.resource().path()
         # we do not want to add this to path (and therefore duplicate data)
         if self.__get.getRaw():
-            return self.__path + "?" + self.__get.getURLEncoded()
-        return self.__path
+            return path + "?" + self.__get.getURLEncoded()
+        return path
 
     def setPath(self, path):
-        if isinstance(path, basestring) and path:
-            self.__path = "/" + path.lstrip("/")
-            self.__updateMessage()
+        if self.resource():
+            self.resource().setPath(path)
+            self.__updateRequestLine()
         return self
 
     def getURL(self):
         if self.resource():
-            return self.resource().getSiteURL() + self.getPath()
+            return self.resource().getSiteURL() + self.path()
         return None
 
     def addPOST(self, name, value):
@@ -456,12 +474,12 @@ class WebRequest(HTTPMessage, WebResourceInterface):
 
     def addGET(self, name, value):
         self.__get[name] = value
-        self.__updateMessage()
+        self.__updateRequestLine()
         return self
 
     def delGET(self, name):
         del self.__get[name]
-        self.__updateMessage()
+        self.__updateRequestLine()
         return self
 
     def delPOST(self, name):
@@ -470,12 +488,12 @@ class WebRequest(HTTPMessage, WebResourceInterface):
 
     def linkTo(self, webresource):
         super(WebRequest, self).linkTo(webresource)
-        self.setPath(self.resource().getPath())
+        self.__updateRequestLine()
         return self
 
     def unlink(self):
         super(WebRequest, self).unlink()
-        self.setPath("/")
+        self.__updateRequestLine()
         return self
 
     # returns urllib2.Request object
@@ -537,10 +555,14 @@ class WebResponse(HTTPMessage):
     def __init__(self):
         super(WebResponse, self).__init__()
 
-    def getstatus(self):
+    def __updateStatusLine(self):
+        if self.__reason and self.__status:
+            self.setStartLine("HTTP/%s %s %s" % (self.getVersion(), self.__status, self.__reason))
+
+    def getStatus(self):
         return self.__status
 
-    def getreason(self):
+    def getReason(self):
         return self.__reason
 
     def encoding(self):
@@ -548,14 +570,13 @@ class WebResponse(HTTPMessage):
             return self["Content-Encoding"]
         return None
 
-    def setreason(self, phrase):
+    def setReason(self, phrase):
         if isinstance(phrase, basestring) and phrase:
             self.__reason = phrase
-            if self.__status:
-                self.setStartLine("HTTP/%s %s %s" % (self.getVersion(), self.__status, self.__reason))
+            self.__updateStatusLine()
         return self
 
-    def setstatus(self, code):
+    def setStatus(self, code):
         # cheack if provided code is number
         try:
             code = int(code)
@@ -569,7 +590,7 @@ class WebResponse(HTTPMessage):
         # check if provided code message is known to us
         # at least known to python (https://docs.python.org/2/library/httplib.html)
         if self.__status and self.__status in httplib.responses:
-            self.setStartLine("HTTP/%s %s %s" % (self.getVersion(), self.__status, httplib.responses[self.__status]))
+            self.setReason(httplib.responses[self.__status])
         return self
 
     def populate(self, response):
@@ -577,8 +598,8 @@ class WebResponse(HTTPMessage):
         # urllib2 response object is instance of urllib.addinfourl class
         if isinstance(response, urllib.addinfourl):
             # set Status-Code and Reason-Phrase
-            self.setstatus(response.code)
-            self.setreason(response.msg)
+            self.setStatus(response.code)
+            self.setReason(response.msg)
             # set headers
             # h.gettype() - Content-Type header value (no header - "text/plain")
             # h.getencoding() - Content-Transfer-Encoding header value (no header - "7bit")
@@ -595,7 +616,7 @@ class WebResponse(HTTPMessage):
             try:
                 # check if we have anything to read (response  consists method
                 # fileno which is bound to original socket fileno method)
-                select.select([response],[],[],0)
+                select.select([response], [], [], 0)
                 # we will handle socket timeout on upper level where we can
                 # submit request again
                 # try:
@@ -686,13 +707,18 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
         return super(WebClient, self).setupHeaders(request)
 
     def getStatus(self):
-        return self.__response.getstatus()
+        return self.__response.getStatus()
 
     def getResponse(self):
         return self.__response
 
+    def saveCookies(self):
+        if isinstance(self.__cookies, cookielib.CookieJar):
+            self.__cookies.save()
+        return self
+
     def __setCookies(self):
-        self.savecookies()
+        self.saveCookies()
         cookiesfile = COOKIESDIR + "/" + self.resource().getHost() + ".txt"
         self.__cookies = cookielib.LWPCookieJar(cookiesfile)
         if os.path.isfile(cookiesfile):
@@ -713,24 +739,19 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
     def setEnc(self, value):
         return self.addHeader("Accept-Encoding", value)
 
-    def savecookies(self):
-        if isinstance(self.__cookies, cookielib.CookieJar):
-            self.__cookies.save()
-        return self
-
     def __del__(self):
-        self.savecookies()
+        self.saveCookies()
 
 class GoogleChrome(WebClient):
 
     def __init__(self):
         super(GoogleChrome, self).__init__()
         # Common headers
-        self.setUA("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.112 Safari/537.36")
-        self.setMTypes("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+        self.setUA("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36")
+        self.setMTypes("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
         self.setConn()
-        self.setLang("en-US,en;q=0.8")
-        self.setEnc("gzip, deflate, sdch")
+        self.setLang("en-US,en;q=0.9")
+        self.setEnc("gzip, deflate, br")
         # Google Chrome specific
         self.addHeader("Upgrade-Insecure-Requests", "1")
         self.addHeader("Cache-Control", "no-cache")
@@ -741,7 +762,7 @@ class GoogleChromeWindows(GoogleChrome):
     def __init__(self):
         super(GoogleChromeWindows, self).__init__()
         # Common headers
-        self.setUA("User-Agent:Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36")
+        self.setUA("Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36")
 
 class WebInterface(object):
 
@@ -765,7 +786,7 @@ class WebInterface(object):
         resp = self.ua.getResponse()
 
         # if request was failed, status is not set
-        if not resp.getstatus():
+        if not resp.getStatus():
             return None
 
         return resp
