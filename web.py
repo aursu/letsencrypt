@@ -22,6 +22,7 @@ class HTTPMessage(UtilsCI):
     # requests) or a status-line (for responses)
     # https://tools.ietf.org/html/rfc7230#section-3.1
     __startLine = None
+    __up = True
 
     # https://tools.ietf.org/html/rfc7230#section-3.3
     __body = None
@@ -33,9 +34,16 @@ class HTTPMessage(UtilsCI):
     def startLine(self):
         return self.__startLine
 
+    def startLineUp(self):
+        return self.__up
+
+    def resetStartLine(self):
+        self.__up = False
+
     def setStartLine(self, data):
         if isinstance(data, basestring) and data:
             self.__startLine = data
+            self.__up = True
             return data
         return None
 
@@ -63,13 +71,12 @@ class HTTPMessage(UtilsCI):
                                                     version in (1, 1.0, 1.1, 2):
             if version in ("1.0", 1, 1.0):
                 self.__version = "1.0"
-                return self.__version
-            if version in ("1.1", 1.1):
-                self.__version = "1.1"
-                return self.__version
             elif version in ("2", "2.0", 2):
                 self.__version = "2"
-                return self.__version
+            else:
+                self.__version = "1.1"
+            self.__up = False
+            return self.__version
         return None
 
     # set HTTP header
@@ -424,8 +431,8 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
         self.__get = WebData()
 
     def __updateRequestLine(self):
-        self.setStartLine("%s %s HTTP/%s" % (self.__method, self.path(), self.getVersion()))
-        self.debug("requesrt line: %s" % self.startLine(), "WebRequest.__updateRequestLine")
+        if not self.startLineUp():
+            self.setStartLine("%s %s HTTP/%s" % (self.__method, self.path(), self.getVersion()))
 
     def __setMethod(self, request):
         # default methods should not be handled
@@ -434,21 +441,30 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
                 request.get_method = lambda : self.__method
         return request
 
-    def setVersion(self, version):
-        version = super(WebRequest, self).setVersion(version)
+    def startLine(self):
         self.__updateRequestLine()
-        return version
+        return super(WebRequest, self).startLine()
 
     def getMethod(self):
         return self.__method
 
     def setMethod(self, meth):
-        if isinstance(meth, basestring) and meth:
-            if meth.upper() in ("GET", "POST", "HEAD"):
-                self.__method = meth.upper()
-                self.__updateRequestLine()
-                return self.__method
-        return None
+        if not (isinstance(meth, basestring) and meth):
+            return None
+
+        meth = meth.upper()
+
+        # update not required
+        if meth == self.__method:
+            return meth
+
+        # supported methods
+        if meth not in ("GET", "POST", "HEAD"):
+            return None
+
+        self.__method = meth
+        self.resetStartLine()
+        return self.__method
 
     def getParams(self):
         return self.__get
@@ -470,11 +486,16 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
         return path
 
     def setPath(self, path):
-        if self.resource():
-            path = self.resource().setPath(path)
-            self.__updateRequestLine()
+        if not self.resource():
+            return None
+
+        if path == self.resource().path():
             return path
-        return None
+
+        self.resource().setPath(path)
+        self.resetStartLine()
+
+        return path
 
     def url(self):
         if self.resource():
@@ -489,25 +510,32 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
         return value
 
     def addGET(self, name, value):
+        if value == self.__get[name]:
+            return value
+
         self.__get[name] = value
-        self.__updateRequestLine()
+        self.resetStartLine()
+
         return value
 
     def delGET(self, name):
+        if self.__get[name] is None:
+            return None
+
         del self.__get[name]
-        self.__updateRequestLine()
+        self.resetStartLine()
 
     def delPOST(self, name):
         del self.__post[name]
 
     def linkTo(self, webresource):
         resource = super(WebRequest, self).linkTo(webresource)
-        self.__updateRequestLine()
+        self.resetStartLine()
         return resource
 
     def unlink(self):
         super(WebRequest, self).unlink()
-        self.__updateRequestLine()
+        self.resetStartLine()
 
     # returns urllib2.Request object
     def prepare(self, webresource = None):
@@ -576,8 +604,12 @@ class WebResponse(HTTPMessage):
         super(WebResponse, self).__init__()
 
     def __updateStatusLine(self):
-        if self.__reason and self.__status:
+        if self.__reason and self.__status and not self.startLineUp():
             self.setStartLine("HTTP/%s %s %s" % (self.getVersion(), self.__status, self.__reason))
+
+    def startLine(self):
+        self.__updateStatusLine()
+        return super(WebResponse, self).startLine()
 
     def getStatus(self):
         return self.__status
@@ -591,16 +623,25 @@ class WebResponse(HTTPMessage):
         return None
 
     def setReason(self, phrase):
-        if isinstance(phrase, basestring) and phrase:
-            self.__reason = phrase
-            self.__updateStatusLine()
-            return self.__reason
-        return None
+        if not (isinstance(phrase, basestring) and phrase):
+            return None
+
+        if self.__reason == phrase:
+            return phrase
+
+        self.__reason = phrase
+        self.resetStartLine()
+
+        return self.__reason
 
     def setStatus(self, code):
         # cheack if provided code is number
         try:
             code = int(code)
+
+            if code == self.__status:
+                return code
+
             # https://www.w3.org/Protocols/rfc2616/rfc2616-sec6.html
             # https://tools.ietf.org/html/rfc2774.html
             if code >= 100 and code <= 510 and code in httplib.responses:
@@ -613,6 +654,7 @@ class WebResponse(HTTPMessage):
         if self.__status:
             self.setReason(httplib.responses[self.__status])
             return self.__status
+
         return None
 
     def populate(self, response):
