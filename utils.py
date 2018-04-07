@@ -35,6 +35,8 @@ class Utils(object):
             self.__defs[key] = value
             if key not in self.__keys:
                 self.__keys += [key]
+            return value
+        return None
 
     def get(self, key):
         if key in self.__keys:
@@ -102,12 +104,13 @@ class UtilsCI(object):
             if key.lower() not in self.__defs:
                 self.__keys += [key]
             self.__defs[key.lower()] = value
+            return value
+        return None
 
     def get(self, key):
         if key.lower() in self.__defs:
             return self.__defs[key.lower()]
-        else:
-            return None
+        return None
 
     def __setitem__(self, key, value):
         self.set(key, value)
