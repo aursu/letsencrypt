@@ -19,73 +19,105 @@ INTERNET_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 class Utils(object):
     __defs = None
     __keys = None
-    __i = 0
+    __idx = 0
+
     def __init__(self):
         super(Utils, self).__init__()
         self.reset()
+
+    def reset(self):
+        self.__defs = {}
+        self.__keys = []
+        self.__idx = 0
+
     def set(self, key, value):
-        if isinstance(key, basestring) and len(key):
+        if isinstance(key, basestring) and key:
             self.__defs[key] = value
             if key not in self.__keys:
-                self.__keys += [ key ]
+                self.__keys += [key]
+            return value
+        return None
+
     def get(self, key):
         if key in self.__keys:
             return self.__defs[key]
         return None
+
     def __setitem__(self, key, value):
         self.set(key, value)
+
     def __getitem__(self, key):
         return self.get(key)
+
+    def __getattr__(self, name):
+        return self[name]
+
     def __delitem__(self, key):
         if key in self.__keys:
             i = self.__keys.index(key)
             del self.__keys[i]
             del self.__defs[key]
-    # def __getattr__(self, name):
-    #     return self[name]
+
     def __len__(self):
         return len(self.__keys)
+
+    # in case if __len__ redefined - count() should keep iteration working
+    def count(self):
+        return len(self.__keys)
+
     def __contains__(self, key):
         return key in self.__keys
+
     # Define iteration
     def __iter__(self):
-        self.__i = 0
+        self.__idx = 0
         return self
+
     def next(self):
-        if self.__i == len(self):
+        if self.__idx == self.count():
             raise StopIteration
-        self.__i += 1
-        return self.__keys[self.__i - 1]
+        self.__idx += 1
+        return self.__keys[self.__idx - 1]
+
     def ksort(self):
         self.__keys.sort()
-    def reset(self):
-        self.__defs = {}
-        self.__keys = []
-        self.__i = 0
+
     def __del__(self):
         pass
 
 class UtilsCI(object):
     __defs = None
     __keys = None
-    __i = 0
+    __idx = 0
+
     def __init__(self):
         super(UtilsCI, self).__init__()
         self.reset()
+
+    def reset(self):
+        self.__defs = {}
+        self.__keys = []
+        self.__idx = 0
+
     def set(self, key, value):
-        if isinstance(key, basestring) and len(key):
+        if isinstance(key, basestring) and key:
             if key.lower() not in self.__defs:
-                self.__keys += [ key ]
+                self.__keys += [key]
             self.__defs[key.lower()] = value
+            return value
+        return None
+
     def get(self, key):
         if key.lower() in self.__defs:
             return self.__defs[key.lower()]
-        else:
-            return None
+        return None
+
     def __setitem__(self, key, value):
         self.set(key, value)
+
     def __getitem__(self, key):
         return self.get(key)
+
     def __delitem__(self, key):
         if key.lower() in self.__defs:
             del self.__defs[key.lower()]
@@ -93,31 +125,36 @@ class UtilsCI(object):
                 if k.lower() == key.lower():
                     i = self.__keys.index(k)
                     del self.__keys[i]
-    # def __getattr__(self, name):
-    #     return self[name]
+
     def __len__(self):
         return len(self.__keys)
+
+    # in case if __len__ redefined - count() should keep iteration working
+    def count(self):
+        return len(self.__keys)
+
     def __contains__(self, key):
         return key.lower() in self.__defs
+
     # Define iteration
     def __iter__(self):
-        self.__i = 0
+        self.__idx = 0
         return self
+
     def next(self):
-        if self.__i == len(self):
+        if self.__idx == self.count():
             raise StopIteration
-        self.__i += 1
-        return self.__keys[self.__i - 1]
+        self.__idx += 1
+        return self.__keys[self.__idx - 1]
+
     def __del__(self):
         pass
+
     def ksort(self):
         self.__keys.sort()
-    def reset(self):
-        self.__defs = {}
-        self.__keys = []
-        self.__i = 0
 
-# JavaScript array partial emulation (only add/get functionality along with iteration, length and string representation)
+# JavaScript array partial emulation (only add/get functionality along with
+# iteration, length and string representation)
 class JSArray(object):
     __defs = None
     __keys = None
