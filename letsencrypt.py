@@ -10,6 +10,7 @@ from parsers import JSONParser
 from utils import Utils, BaseUtils
 from chiffrierung import RS256Signer, SSLObject, DEFAULT_KEY_SIZE, SSL_DATETIME_FORMAT
 from config import DomainConfig
+from log import LogInterface
 
 # https://acme-v01.api.letsencrypt.org/
 class LetsEncryptACME(WebResource):
@@ -46,23 +47,25 @@ class ACMEObject(JSONParser):
     def valid(self):
         return isinstance(self.jsonobj, dict)
 
-class LetsEncryptResource(ACMEObject, WebInterface):
+class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
 
     __name = None
 
     # url is predefined to None as non required during initialization
     def __init__(self, name, url = None):
         super(LetsEncryptResource, self).__init__()
+
+        self.debug("resource name: %s" % name, "__init__")
         if isinstance(name, basestring) and name:
             self.__name = name
 
         # URL could be fetched by resource name from provided dictionary object
         if isinstance(url, Utils) or isinstance(url, dict):
+            self.debug("\"%s\" in url: %s" % (self.__name, self.__name in url))
             if self.__name and self.__name in url:
                 url = url[self.__name]
 
         if isinstance(url, basestring) and url:
-#            print "LetsEncryptResource.__init__: url: %s" % url
             self.setURL(url)
 
     def getName(self):
@@ -129,7 +132,7 @@ class LetsEncryptRegistrationNew(LetsEncryptRegistration):
         response = super(LetsEncryptRegistrationNew, self).send(data)
         if response:
             self["reg"] = response["Location"]
-            if response.getstatus() == 201:
+            if response.getStatus() == 201:
                 ( self["linkagreement"], ) = [ u.split(";")[0].strip("<>") for u in response["Link"] if "terms-of-service" in u ]
         return response
 
@@ -144,7 +147,7 @@ class LetsEncryptAuthorization(LetsEncryptResource):
             payload["identifier"] = { "type": "dns", "value": domain }
         return json.dumps(payload)
 
-# https://letsencrypt.github.io/acme-spec/#rfc.section.6.5
+# https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-6.5
 class LetsEncryptAuthorizationNew(LetsEncryptAuthorization):
 
     def __init__(self, url):
@@ -156,7 +159,7 @@ class LetsEncryptAuthorizationNew(LetsEncryptAuthorization):
             self["authz"] = response["Location"]
         return response
 
-# https://letsencrypt.github.io/acme-spec/#rfc.section.6.5
+# https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-6.5
 class LetsEncryptAuthorizationCheck(LetsEncryptAuthorization):
 
     def __init__(self, url):
@@ -203,7 +206,7 @@ class LetsEncryptCertificateIssuance(LetsEncryptResource):
     def send(self, data = None):
         response = super(LetsEncryptCertificateIssuance, self).send(data)
         if response:
-            if response.getstatus() == 201:
+            if response.getStatus() == 201:
                 if response["Content-Type"] == "application/pkix-cert":
                     crt = response.getBody()
                     self["crt"] = self.base64urlencode(crt)
@@ -222,7 +225,7 @@ class LetsEncryptCertificateRevoke(LetsEncryptResource):
         payload = { "resource": self.getName(), "certificate": crt, "reason": 1 }
         return json.dumps(payload)
 
-class LetsEncrypt(BaseUtils):
+class LetsEncrypt(BaseUtils, LogInterface):
 
     config = None
     signer = None
@@ -263,27 +266,29 @@ class LetsEncrypt(BaseUtils):
         return key
 
     def send(self, resource, *args):
+        self.setLogEntry("send")  # debug
+
         payload = resource.payload(*args)
 
         jws = None
         if isinstance(payload, basestring):
             jws = self.JWS(payload)
-#            print "LetsEncrypt.send: payload: %s" % payload
-#            print "LetsEncrypt.send: jws: %s" % jws
+            self.debug("payload: %s" % payload)
+            self.debug("jws: %s" % jws)
         response = resource.send(jws)
         # update nonce
         self.__updateNonce(resource)
         if isinstance(response, WebResponse):
-            print "LetsEncrypt.send: resource: %s" % resource.getName()
-            print "LetsEncrypt.send: status: %s" % response.getstatus()
+            self.warn("resource name: %s" % resource.getName())
+            self.warn("response status: %s" % response.getStatus())
             if response["Content-Type"] in ("application/json", "application/problem+json") \
                 or "text/plain" in response["Content-Type"]:
-                print "LetsEncrypt.send: body:"
-                print response.getBody()
-#            for f in response:
-#                print "LetsEncrypt.send: h: %s: %s" % (f, response[f])
-#        for f in resource:
-#            print "LetsEncrypt.send: d: %s: %s" % (f, resource[f])
+                self.warn("response body:")
+                self.warn(response.getBody())
+            for f in response:
+                self.debug("h: %s: %s" % (f, response[f]))
+        for f in resource:
+            self.debug("d: %s: %s" % (f, resource[f]))
         return response
 
     # def init(self, ctyp = "dns-01"):
@@ -408,7 +413,7 @@ class LetsEncrypt(BaseUtils):
             response = self.send(newreg, email)
             status = None
             if response:
-                status = response.getstatus()
+                status = response.getStatus()
             # store received data to configuration file
             if status in (201, 409):
                 p = "reg"
@@ -430,7 +435,7 @@ class LetsEncrypt(BaseUtils):
         response = self.send(reg, self.config.contact(), self.config.contact("linkagreement"))
         status = None
         if response:
-            status = response.getstatus()
+            status = response.getStatus()
         if status == 202:
             p = "agreement"
             self.config.setContact(reg[p], p)
@@ -442,7 +447,7 @@ class LetsEncrypt(BaseUtils):
         response = self.send(reg)
         status = None
         if response:
-            status = response.getstatus()
+            status = response.getStatus()
         return status
 
     def authorization(self):
@@ -450,7 +455,7 @@ class LetsEncrypt(BaseUtils):
         response = self.send(auth, self.config.domain())
         status = None
         if response:
-            status = response.getstatus()
+            status = response.getStatus()
         # if agreement is not accepted
         # if status == 403:
         #     if auth["type"] == "urn:acme:error:unauthorized":
@@ -476,7 +481,7 @@ class LetsEncrypt(BaseUtils):
         response = self.send(authz)
         status = None
         if response:
-            status = response.getstatus()
+            status = response.getStatus()
         if status == 200:
             # challenges
             for p in ("status", "expires"):
@@ -526,7 +531,7 @@ class LetsEncrypt(BaseUtils):
             response = self.send(challenge, self.keyAuthorization(ctyp))
             status = None
             if response:
-                status = response.getstatus()
+                status = response.getStatus()
             if status == 202:
                 p = "status"
                 self.config[ctyp][p] = challenge[p]
@@ -550,7 +555,7 @@ class LetsEncrypt(BaseUtils):
         response = self.send(cert, csr)
         status = None
         if response:
-            status = response.getstatus()
+            status = response.getStatus()
         if status == 201:
             for p in ("uri", "crt"):
                 self.config.setCertificate(cert[p], p)
@@ -573,7 +578,7 @@ class LetsEncrypt(BaseUtils):
         response = self.send(revoke, data)
         status = None
         if response:
-            status = response.getstatus()
+            status = response.getStatus()
         if status == 200:
             if not cert:
                 for p in ("crt", "uri"):
