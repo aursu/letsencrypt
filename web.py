@@ -8,6 +8,7 @@ import os.path
 from StringIO import StringIO
 import select
 import gzip
+from log import LogInterface
 
 # maximum attemps count to send request to server
 MAXATTEMPTS = 5
@@ -35,7 +36,8 @@ class HTTPMessage(UtilsCI):
     def setStartLine(self, data):
         if isinstance(data, basestring) and data:
             self.__startLine = data
-        return self
+            return data
+        return None
 
     def getBody(self):
         return self.__body
@@ -47,9 +49,10 @@ class HTTPMessage(UtilsCI):
         return 0
 
     def setBody(self, data):
-        if isinstance(data, basestring) and len(data):
+        if isinstance(data, basestring) and data:
             self.__body = data
-        return self
+            return data
+        return None
 
     # return HTTP version
     def getVersion(self):
@@ -60,19 +63,22 @@ class HTTPMessage(UtilsCI):
                                                     version in (1, 1.0, 1.1, 2):
             if version in ("1.0", 1, 1.0):
                 self.__version = "1.0"
+                return self.__version
             if version in ("1.1", 1.1):
                 self.__version = "1.1"
+                return self.__version
             elif version in ("2", "2.0", 2):
                 self.__version = "2"
-        return self
+                return self.__version
+        return None
 
     # set HTTP header
     def set(self, header, value):
         # headers could not be empty: no value - no header
         # support integer 0 as wells
         if value or isinstance(value, int):
-            super(HTTPMessage, self).set(header, str(value))
-        return self
+            return super(HTTPMessage, self).set(header, str(value))
+        return None
 
     # https://tools.ietf.org/html/rfc7230#section-3.2.2
     # A sender MUST NOT generate multiple header fields with the same field name
@@ -98,14 +104,15 @@ class HTTPMessage(UtilsCI):
             if value or isinstance(value, int):
                 # headers names are case-insensitive
                 if h in self:
-                    if isinstance(self[h], list):
-                        self[h] += [str(value)]
+                    header = self[h]
+                    if isinstance(header, list):
+                        header += [str(value)]
                     else:
-                        header = [self[h], str(value)]
-                        super(HTTPMessage, self).set(h, header)
+                        header = [header, str(value)]
+                    return super(HTTPMessage, self).set(h, header)
                 else:
-                    self.set(h, value)
-        return self
+                    return self.set(h, value)
+        return None
 
     def reset(self):
         self.__startLine = None
@@ -119,12 +126,11 @@ class WebData(UtilsCI):
     def __init__(self):
         super(WebData, self).__init__()
 
-    # python None is empty string s
+    # python None is empty string
     def set(self, key, value):
         if value is None:
             value = ""
-        super(WebData, self).set(key, str(value))
-        return self
+        return super(WebData, self).set(key, str(value))
 
     def getRaw(self):
         rawdata = ""
@@ -174,7 +180,8 @@ class POSTData(WebData):
     def setData(self, data):
         if isinstance(data,  basestring) and data:
             self.__data = data
-        return self
+            return data
+        return None
 
     def reset(self):
         self.__data = ""
@@ -200,16 +207,16 @@ class WebService(object):
             self.__scheme = "http"
         else:
             self.__scheme = "https"
-        return self
+        return self.__scheme
 
-    def setPort(self, port = 0):
+    def setPort(self, port = 443):
         if isinstance(port, int) and port >= 1 and port <= 65535:
             self.__port = port
-        elif self.scheme() == "https":
-            self.__port = 443
-        else:
+        elif self.scheme() == "http":
             self.__port = 80
-        return self
+        else:
+            self.__port = 443
+        return self.__port
 
 # interface which provide ability to store HTTP headers and propagate them into
 # WEB request objects
@@ -221,26 +228,30 @@ class SetupHeadersInterface(object):
         super(SetupHeadersInterface, self).__init__()
         self.__headers = HTTPMessage()
 
+    def setHeader(self, name, value):
+        return self.__headers.set(name, value)
+
     # Ability to have WebResource specific headers
     def addHeader(self, name, value):
-        self.__headers.add(name, value)
-        return self
+        return self.__headers.add(name, value)
 
     # setup headers into Request object
     def __setupHeader(self, request, name, value):
         # WebRequest is child of HTTPMessage
         if isinstance(request, WebRequest):
             request[name] = value
+            return value
         elif isinstance(request, urllib2.Request):
             if isinstance(value, list):
-                request.add_header(name, ",".join(value))
-            else:
-                request.add_header(name, value)
+                value = ",".join(value)
+            request.add_header(name, value)
+            return value
+        return None
 
     def setupHeaders(self, request):
         for h in self.__headers:
             self.__setupHeader(request, h, self.__headers[h])
-        return self
+        return request
 
 # WebSite is object which responsible for connection to specific host/site
 class WebSite(WebService, SetupHeadersInterface):
@@ -251,20 +262,22 @@ class WebSite(WebService, SetupHeadersInterface):
     # https://tools.ietf.org/html/rfc3986#section-3.2.2
     __hostname = None
 
-    def __init__(self, hostname = "localhost"):
+    def __init__(self, hostname):
         super(WebSite, self).__init__()
         self.setHost(hostname)
 
-    def getHost(self):
+    def host(self):
         return self.__hostname
 
-    def getURL(self):
-        url = "%s://%s" % (self.scheme(), self.__hostname)
-        if self.port() in (80, 443):
-            return url
-        return "%s:%s" % (url, self.port())
+    def url(self):
+        if self.__hostname:
+            url = "%s://%s" % (self.scheme(), self.__hostname)
+            if self.port() in (80, 443):
+                return url
+            return "%s:%s" % (url, self.port())
+        return None
 
-    # default hostname is "localhost", hostname should be defined for WebService
+    # hostname should be defined for WebService
     # supported only registered names (no IPv4 or IPv6)
     def setHost(self, hostname):
         if isinstance(hostname, basestring) and hostname:
@@ -273,13 +286,9 @@ class WebSite(WebService, SetupHeadersInterface):
             if checker.match(hostname) is not None:
                 self.__hostname = hostname
                 # website specific header
-                self.addHeader("Host", self.__hostname)
-                return self
-        self.__hostname = "localhost"
-        self.addHeader("Host", "localhost")
-        # localhost could not be secure by default
-        self.secure(False)
-        return self
+                self.setHeader("Host", self.__hostname)
+                return self.__hostname
+        return None
 
 # WebResource is object which responsible for connection to separate URL path on
 # Web site
@@ -293,7 +302,7 @@ class WebResource(WebSite):
     # URI. (https://tools.ietf.org/html/rfc3986#section-3.3)
     __path = "/"
 
-    def __init__(self, host = "localhost", path = "/"):
+    def __init__(self, host = None, path = "/"):
         super(WebResource, self).__init__(host)
         self.setPath(path)
 
@@ -305,30 +314,30 @@ class WebResource(WebSite):
             self.__path = "/" + path.lstrip("/")
         else:
             self.__path = "/"
-        return self
+        return self.__path
 
     # support for linkig WebSite into WebResource
     def linkTo(self, website):
-        if isinstance(website, WebSite):
-            self.setHost(website.getHost())
-            if website.scheme() == "http":
-                self.secure(False)
-            self.setPort(website.port())
-        else:
+        if not isinstance(website, WebSite):
             raise TypeError("Inappropriate argument type for website.")
-        return self
+        self.setHost(website.host())
+        if website.scheme() == "http":
+            self.secure(False)
+        self.setPort(website.port())
+        return self.url()
 
     # return URL of Web site we connect to (ie https://domain.com)
     def getSiteURL(self):
-        return super(WebResource, self).getURL()
+        return super(WebResource, self).url()
 
     def addSegment(self, subpath):
         if isinstance(subpath, basestring) and subpath:
             self.__path = self.__path.rstrip("/") + "/" +  subpath.lstrip("/")
-        return self
+            return self.__path
+        return None
 
     # return Web resource URL (ie https://domain.com/some/path)
-    def getURL(self):
+    def url(self):
         return self.getSiteURL() + self.__path
 
     # Web resource URL parser
@@ -356,7 +365,7 @@ class WebResource(WebSite):
                 # return back to original case
                 url = webresource
 
-            host = None     # default behaviour is "http://localhost"
+            host = None
             path = "/"
             if "/" in url:
                 delim = url.index("/")
@@ -373,7 +382,8 @@ class WebResource(WebSite):
 
             self.setHost(host)
             self.setPath(path)
-        return self
+            return self.url()
+        return None
 
 class WebResourceInterface(object):
 
@@ -385,25 +395,25 @@ class WebResourceInterface(object):
     def linkTo(self, webresource):
         if isinstance(webresource, WebResource):
             self.__resource = webresource
+            return self.__resource
         elif isinstance(webresource, basestring) and webresource:
             self.__resource = WebResource()
             self.__resource.setURL(webresource)
+            return self.__resource
         else:
             raise TypeError("Inappropriate argument type for web resource.")
-        return self
 
     def resource(self):
         return self.__resource
 
     def unlink(self):
         self.__resource = None
-        return self
 
     def __del__(self):
         pass
 
 # WebRequest should know WebResource to which it will be submitted
-class WebRequest(HTTPMessage, WebResourceInterface):
+class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
     __method = "GET"
     __get = None
     __post = None
@@ -415,6 +425,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
 
     def __updateRequestLine(self):
         self.setStartLine("%s %s HTTP/%s" % (self.__method, self.path(), self.getVersion()))
+        self.debug("requesrt line: %s" % self.startLine(), "WebRequest.__updateRequestLine")
 
     def __setMethod(self, request):
         # default methods should not be handled
@@ -424,19 +435,20 @@ class WebRequest(HTTPMessage, WebResourceInterface):
         return request
 
     def setVersion(self, version):
-        super(WebRequest, self).setVersion(version)
+        version = super(WebRequest, self).setVersion(version)
         self.__updateRequestLine()
-        return self
+        return version
 
     def getMethod(self):
         return self.__method
 
     def setMethod(self, meth):
         if isinstance(meth, basestring) and meth:
-            if meth.upper() in ( "GET", "POST", "HEAD" ):
+            if meth.upper() in ("GET", "POST", "HEAD"):
                 self.__method = meth.upper()
                 self.__updateRequestLine()
-        return self
+                return self.__method
+        return None
 
     def getParams(self):
         return self.__get
@@ -449,52 +461,53 @@ class WebRequest(HTTPMessage, WebResourceInterface):
 
     def path(self):
         path = "/"
+        query = self.__get.getURLEncoded()
         if self.resource():
             path = self.resource().path()
-        # we do not want to add this to path (and therefore duplicate data)
-        if self.__get.getRaw():
-            return path + "?" + self.__get.getURLEncoded()
+        # we do not want to add query into path
+        if query:
+            return path + "?" + query
         return path
 
     def setPath(self, path):
         if self.resource():
-            self.resource().setPath(path)
+            path = self.resource().setPath(path)
             self.__updateRequestLine()
-        return self
+            return path
+        return None
 
-    def getURL(self):
+    def url(self):
         if self.resource():
-            return self.resource().getSiteURL() + self.path()
+            url = self.resource().getSiteURL()
+            if url:
+                return url + self.path()
         return None
 
     def addPOST(self, name, value):
         self.__post[name] = value
         self.setMethod("POST")
-        return self
+        return value
 
     def addGET(self, name, value):
         self.__get[name] = value
         self.__updateRequestLine()
-        return self
+        return value
 
     def delGET(self, name):
         del self.__get[name]
         self.__updateRequestLine()
-        return self
 
     def delPOST(self, name):
         del self.__post[name]
-        return self
 
     def linkTo(self, webresource):
-        super(WebRequest, self).linkTo(webresource)
+        resource = super(WebRequest, self).linkTo(webresource)
         self.__updateRequestLine()
-        return self
+        return resource
 
     def unlink(self):
         super(WebRequest, self).unlink()
         self.__updateRequestLine()
-        return self
 
     # returns urllib2.Request object
     def prepare(self, webresource = None):
@@ -502,12 +515,19 @@ class WebRequest(HTTPMessage, WebResourceInterface):
         if webresource:
             self.linkTo(webresource)
 
+        url = self.url()
+        if not url:
+            return None
+
         # prepare urllib2.Request object
-        r = urllib2.Request(self.getURL())
+        r = urllib2.Request(url)
+
+        self.debug("URL: %s" % url, "WebRequest.prepare")
 
         # propagate headers
         for h in self:
             r.add_header(h, self[h])
+            self.debug("add_header: %s: %s" % (h, self[h]))
 
         # propagate body from POST data
         self.setBody()
@@ -545,7 +565,7 @@ class WebRequest(HTTPMessage, WebResourceInterface):
                 self.linkTo(self.resource())
             else:
                 self.linkTo(url)
-            return self
+            return self.url()
         return None
 
 class WebResponse(HTTPMessage):
@@ -574,7 +594,8 @@ class WebResponse(HTTPMessage):
         if isinstance(phrase, basestring) and phrase:
             self.__reason = phrase
             self.__updateStatusLine()
-        return self
+            return self.__reason
+        return None
 
     def setStatus(self, code):
         # cheack if provided code is number
@@ -582,21 +603,22 @@ class WebResponse(HTTPMessage):
             code = int(code)
             # https://www.w3.org/Protocols/rfc2616/rfc2616-sec6.html
             # https://tools.ietf.org/html/rfc2774.html
-            if code >= 100 and code <= 510:
+            if code >= 100 and code <= 510 and code in httplib.responses:
                 self.__status = code
         except TypeError:
-            return self
+            return None
         # update HTTP message for currnt object
         # check if provided code message is known to us
         # at least known to python (https://docs.python.org/2/library/httplib.html)
-        if self.__status and self.__status in httplib.responses:
+        if self.__status:
             self.setReason(httplib.responses[self.__status])
-        return self
+            return self.__status
+        return None
 
     def populate(self, response):
-        self.reset()
         # urllib2 response object is instance of urllib.addinfourl class
         if isinstance(response, urllib.addinfourl):
+            self.reset()
             # set Status-Code and Reason-Phrase
             self.setStatus(response.code)
             self.setReason(response.msg)
@@ -628,7 +650,8 @@ class WebResponse(HTTPMessage):
                 self.setBody(d)
             except AttributeError:
                 pass
-        return self
+            return self.startLine()
+        return None
 
     def reset(self):
         self.__status = None
@@ -661,16 +684,18 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
 
     def setAddress(self, webresource):
         super(WebClient, self).linkTo(webresource)
-        # setup cookies
-        self.__setCookies()
-        # setup opener object to use cookies
-        self.__opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.__cookies))
-        return self
+        if self.resource().host():
+            # setup cookies
+            self.__setCookies()
+            # setup opener object to use cookies
+            self.__opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.__cookies))
+            return self.resource()
+        return None
 
     # return urllib2 response object if request was successfull
     # return None if fail
     def sendRequest(self, webrequest):
-        if not self.resource():
+        if not (self.resource() and self.resource().host()):
             raise ValueError("Web address is not specified. Use setAddress() to define it.")
         if not isinstance(webrequest, WebRequest):
             raise TypeError("Inappropriate argument type for web request.")
@@ -689,16 +714,16 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
             try:
                 u2response = self.__opener.open(u2request, timeout = SOCKTIMEOUT)
                 self.__response.populate(u2response)
-                break
+                return self.__response
             except urllib2.HTTPError as r:
                 if isinstance(r, urllib.addinfourl):
                     self.__response.populate(r)
-                    break
+                    return self.__response
                 attempt += 1
             except (urllib2.URLError, socket.timeout, IOError):
                 attempt += 1
 
-        return self
+        return None
 
     def setupHeaders(self, request):
         # if web resource has own specific headers
@@ -715,14 +740,16 @@ class WebClient(WebResourceInterface, SetupHeadersInterface):
     def saveCookies(self):
         if isinstance(self.__cookies, cookielib.CookieJar):
             self.__cookies.save()
-        return self
+            return self.__cookies
+        return None
 
     def __setCookies(self):
-        self.saveCookies()
-        cookiesfile = COOKIESDIR + "/" + self.resource().getHost() + ".txt"
-        self.__cookies = cookielib.LWPCookieJar(cookiesfile)
-        if os.path.isfile(cookiesfile):
-            self.__cookies.load()
+        if self.resource().host():
+            self.saveCookies()
+            cookiesfile = COOKIESDIR + "/" + self.resource().host() + ".txt"
+            self.__cookies = cookielib.LWPCookieJar(cookiesfile)
+            if os.path.isfile(cookiesfile):
+                self.__cookies.load()
 
     def setUA(self, value):
         return self.addHeader("User-Agent", value)
@@ -779,6 +806,10 @@ class WebInterface(object):
         self.request.setData(data)
 
         self.request.linkTo(self.resource)
+
+        # check if resouce was properly initialized
+        if not self.request.url():
+            return None
 
         self.ua.setAddress(self.request.resource())
         self.ua.sendRequest(self.request)
