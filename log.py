@@ -23,6 +23,7 @@ class LogUtils(BaseUtils):
         if entry:
             self.__entry = str(entry)
             self.__entrysep = " "
+        return self
 
     # return current timestamp in format like [15/Apr/2012:19:29:43 -0400]
     def logstamp(self, stamp = None, formats = LOGSTAMP):
@@ -66,3 +67,41 @@ class LogUtils(BaseUtils):
     def __del__(self):
         if self.__dest and not self.__std:
             self.__dest.close()
+
+class LogInterface(object):
+
+    __logger = None
+    __debug = True
+
+    def __init__(self):
+        self.__logger = LogUtils(self.__class__.__name__)
+
+    def setLogEntry(self, entry):
+        if isinstance(entry, basestring):
+            if entry in self.__class__.__dict__:
+                self.__logger.logentry("%s.%s" % (self.__class__.__name__, entry))
+            else:
+                self.__logger.logentry(entry)
+
+    def warn(self, message, location = None):
+        if location:
+            self.setLogEntry(location)
+        self.__logger.warn(message)
+
+    def noDebug(self):
+        self.__debug = False
+
+    def doDebug(self):
+        self.__debug = True
+
+    def setLogDestination(self, dest):
+        if self.__debug:
+            self.__logger.logdest(dest)
+
+    def setDebugEntry(self, entry):
+        if self.__debug:
+            self.setLogEntry(entry)
+
+    def debug(self, debuginfo, location = None):
+        if self.__debug:
+            self.warn(debuginfo, location)
