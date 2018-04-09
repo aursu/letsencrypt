@@ -14,6 +14,8 @@ from log import LogInterface
 MAXATTEMPTS = 5
 SOCKTIMEOUT = 5
 
+# RFC2616 was replaced by multiple RFCs (7230-7237)
+
 class HTTPMessage(UtilsCI):
 
     # An HTTP message can be either a request from client to server or a
@@ -555,7 +557,7 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
         # propagate headers
         for h in self:
             r.add_header(h, self[h])
-            self.debug("add_header: %s: %s" % (h, self[h]))
+            self.debug("hdr: %s: %s" % (h, self[h]))
 
         # propagate body from POST data
         self.setBody()
