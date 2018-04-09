@@ -36,8 +36,8 @@ class HTTPMessage(UtilsCI):
     def startLine(self):
         return self.__startLine
 
-    def startLineUp(self):
-        return self.__up
+    def modified(self):
+        return not self.__up
 
     def resetStartLine(self):
         self.__up = False
@@ -46,7 +46,7 @@ class HTTPMessage(UtilsCI):
         if isinstance(data, basestring) and data:
             self.__startLine = data
             self.__up = True
-            return data
+            return self.__startLine
         return None
 
     def getBody(self):
@@ -61,7 +61,7 @@ class HTTPMessage(UtilsCI):
     def setBody(self, data):
         if isinstance(data, basestring) and data:
             self.__body = data
-            return data
+            return self.__body
         return None
 
     # return HTTP version
@@ -69,17 +69,24 @@ class HTTPMessage(UtilsCI):
         return self.__version
 
     def setVersion(self, version):
-        if (isinstance(version, basestring) and version) or \
-                                                    version in (1, 1.0, 1.1, 2):
-            if version in ("1.0", 1, 1.0):
-                self.__version = "1.0"
-            elif version in ("2", "2.0", 2):
-                self.__version = "2"
-            else:
-                self.__version = "1.1"
-            self.__up = False
-            return self.__version
-        return None
+        if not (isinstance(version, basestring) and version):
+            if version not in (1, 1.0, 1.1, 2):
+                return None
+
+        if version in ("1.0", 1, 1.0):
+            version = "1.0"
+        elif version in ("2", "2.0", 2):
+            version = "2"
+        else:
+            version = "1.1"
+
+        if version == self.__version:
+            return version
+
+        self.__version = version
+        self.__up = False
+
+        return self.__version
 
     # set HTTP header
     def set(self, header, value):
@@ -125,6 +132,7 @@ class HTTPMessage(UtilsCI):
 
     def reset(self):
         self.__startLine = None
+        self.__up = True
         self.__body = None
         self.__version = "1.1"
         super(HTTPMessage, self).reset()
@@ -433,7 +441,7 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
         self.__get = WebData()
 
     def __updateRequestLine(self):
-        if not self.startLineUp():
+        if self.modified():
             self.setStartLine("%s %s HTTP/%s" % (self.__method, self.path(), self.getVersion()))
 
     def __setMethod(self, request):
@@ -606,7 +614,7 @@ class WebResponse(HTTPMessage):
         super(WebResponse, self).__init__()
 
     def __updateStatusLine(self):
-        if self.__reason and self.__status and not self.startLineUp():
+        if self.__reason and self.__status and self.modified():
             self.setStartLine("HTTP/%s %s %s" % (self.getVersion(), self.__status, self.__reason))
 
     def startLine(self):
