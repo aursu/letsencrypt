@@ -19,6 +19,14 @@ class LetsEncryptACME(WebResource):
         # super(LetsEncryptACME, self).__init__("acme-staging.api.letsencrypt.org")
         self.secure(True)
 
+# In order to help clients configure themselves with the right URIs for each
+# ACME operation, ACME servers provide a directory object. This should be the
+# root URL with which clients are configured. It is a JSON dictionary, whose
+# keys are the "resource" values listed in Section 5.1, and whose values are the
+# URIs used to accomplish the corresponding function.
+# Clients access the directory by sending a GET request to the directory URI.
+# https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-6.2
+#
 # https://acme-v01.api.letsencrypt.org/directory
 class ACMEDirectory(LetsEncryptACME):
     def __init__(self):
@@ -47,7 +55,7 @@ class ACMEObject(JSONParser):
     def valid(self):
         return isinstance(self.jsonobj, dict)
 
-class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
+class LetsEncryptResource(ACMEObject, WebInterface):
 
     __name = None
 
@@ -55,13 +63,11 @@ class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
     def __init__(self, name, url = None):
         super(LetsEncryptResource, self).__init__()
 
-        self.debug("resource name: %s" % name, "__init__")
         if isinstance(name, basestring) and name:
             self.__name = name
 
         # URL could be fetched by resource name from provided dictionary object
         if isinstance(url, Utils) or isinstance(url, dict):
-            self.debug("\"%s\" in url: %s" % (self.__name, self.__name in url))
             if self.__name and self.__name in url:
                 url = url[self.__name]
 
@@ -71,10 +77,31 @@ class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
     def getName(self):
         return self.__name
 
+    # The "nonce" header parameter provides a unique value that enables the
+    # verifier of a JWS to recognize when replay has occurred.  The "nonce"
+    # header parameter MUST be carried in the protected header of the JWS.
+    # The value of the "nonce" header parameter MUST be an octet string, encoded
+    # according to the base64url encoding described in Section 2 of [RFC7515].
+    # If the value of a "nonce" header parameter is not valid according to this
+    # encoding, then the verifier MUST reject the JWS as malformed.
+    # https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-5.5.2
     def setNonce(self, response):
         if isinstance(response, WebResponse) and "Replay-Nonce" in response:
             self["nonce"] = response["Replay-Nonce"]
 
+    # The "Replay-Nonce" header field includes a server-generated value that the
+    # server can use to detect unauthorized replay in future client requests.
+    # The server should generate the value provided in Replay-Nonce in such a
+    # way that they are unique to each message, with high probability.
+    # The value of the Replay-Nonce field MUST be an octet string encoded
+    # according to the base64url encoding described in Section 2 of [RFC7515].
+    # Clients MUST ignore invalid Replay-Nonce values.
+    #   base64url = [A-Z] / [a-z] / [0-9] / "-" / "_"
+    #   Replay-Nonce = *base64url
+    # The Replay-Nonce header field SHOULD NOT be included in HTTP request
+    # messages.
+    # https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-5.5.1
+    #
     # nonce should be always up to date, therefore parameter response provides
     # posibility to set nonce based on another operation response
     def getNonce(self, response = None):
@@ -108,6 +135,7 @@ class LetsEncryptDirectory(LetsEncryptResource):
         super(LetsEncryptDirectory, self).send()
         return self.object()
 
+# https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-6.3
 class LetsEncryptRegistration(LetsEncryptResource):
 
     def __init__(self, url, name = "reg"):
@@ -283,12 +311,11 @@ class LetsEncrypt(BaseUtils, LogInterface):
             self.warn("response status: %s" % response.getStatus())
             if response["Content-Type"] in ("application/json", "application/problem+json") \
                 or "text/plain" in response["Content-Type"]:
-                self.warn("response body:")
-                self.warn(response.getBody())
+                self.warn("response body:\n%s" % response.getBody())
             for f in response:
-                self.debug("h: %s: %s" % (f, response[f]))
+                self.debug("hdr: %s: %s" % (f, response[f]))
         for f in resource:
-            self.debug("d: %s: %s" % (f, resource[f]))
+            self.debug("data: %s: %s" % (f, resource[f]))
         return response
 
     # def init(self, ctyp = "dns-01"):
