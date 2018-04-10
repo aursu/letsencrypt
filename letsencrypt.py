@@ -13,10 +13,17 @@ from config import DomainConfig
 from log import LogInterface
 
 # https://acme-v01.api.letsencrypt.org/
+# https://tools.ietf.org/html/draft-ietf-acme-acme-01
 class LetsEncryptACME(WebResource):
     def __init__(self):
         super(LetsEncryptACME, self).__init__("acme-v01.api.letsencrypt.org")
-        # super(LetsEncryptACME, self).__init__("acme-staging.api.letsencrypt.org")
+        self.secure(True)
+
+# https://community.letsencrypt.org/t/acme-v2-production-environment-wildcards/55578
+# https://tools.ietf.org/html/draft-ietf-acme-acme-10
+class LetsEncryptACMEV2(WebResource):
+    def __init__(self):
+        super(LetsEncryptACMEV2, self).__init__("acme-v02.api.letsencrypt.org")
         self.secure(True)
 
 # In order to help clients configure themselves with the right URIs for each
@@ -31,6 +38,11 @@ class LetsEncryptACME(WebResource):
 class ACMEDirectory(LetsEncryptACME):
     def __init__(self):
         super(ACMEDirectory, self).__init__()
+        self.setPath("directory")
+
+class ACMEDirectoryV2(LetsEncryptACMEV2):
+    def __init__(self):
+        super(ACMEDirectoryV2, self).__init__()
         self.setPath("directory")
 
 class ACMEObject(JSONParser):
@@ -55,7 +67,7 @@ class ACMEObject(JSONParser):
     def valid(self):
         return isinstance(self.jsonobj, dict)
 
-class LetsEncryptResource(ACMEObject, WebInterface):
+class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
 
     __name = None
 
@@ -68,8 +80,18 @@ class LetsEncryptResource(ACMEObject, WebInterface):
 
         # URL could be fetched by resource name from provided dictionary object
         if isinstance(url, Utils) or isinstance(url, dict):
+            self.debug("resource name \"%s\" is in dictionary object (%s): %s" %
+                    (self.__name, url.__class__.__name__, self.__name in url))
             if self.__name and self.__name in url:
                 url = url[self.__name]
+                # The "url" header parameter specifies the URL [RFC3986] to
+                # which this JWS object is directed. The "url" header parameter
+                # MUST be carried in the protected header of the JWS. The value
+                # of the "url" header parameter MUST be a string representing
+                # the URL.
+                #
+                # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.3.1
+                self["url"] = url
 
         if isinstance(url, basestring) and url:
             self.setURL(url)
@@ -89,31 +111,15 @@ class LetsEncryptResource(ACMEObject, WebInterface):
         if isinstance(response, WebResponse) and "Replay-Nonce" in response:
             self["nonce"] = response["Replay-Nonce"]
 
-    # The "Replay-Nonce" header field includes a server-generated value that the
-    # server can use to detect unauthorized replay in future client requests.
-    # The server should generate the value provided in Replay-Nonce in such a
-    # way that they are unique to each message, with high probability.
-    # The value of the Replay-Nonce field MUST be an octet string encoded
-    # according to the base64url encoding described in Section 2 of [RFC7515].
-    # Clients MUST ignore invalid Replay-Nonce values.
-    #   base64url = [A-Z] / [a-z] / [0-9] / "-" / "_"
-    #   Replay-Nonce = *base64url
-    # The Replay-Nonce header field SHOULD NOT be included in HTTP request
-    # messages.
-    # https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-5.5.1
-    #
-    # nonce should be always up to date, therefore parameter response provides
-    # posibility to set nonce based on another operation response
-    def getNonce(self, response = None):
-        self.request.setMethod("HEAD")
-        response = self.sendRequest()
-        if not response:
-            return None
-        self["nonce"] = response["Replay-Nonce"]
-        return self["nonce"]
-
-    def send(self, data = None ):
+    def send(self, data = None):
         self.request.setMethod("GET")
+        # Because client requests in ACME carry JWS objects in the Flattened
+        # JSON Serialization, they must have the "Content-Type" header field set
+        # to "application/jose+json". If a request does not meet this
+        # requirement, then the server MUST return a response with status code
+        # 415 (Unsupported Media Type).
+        if data:
+            self.request["Content-Type"] = "application/jose+json"
         response = self.sendRequest(data)
         # if request was failed, status is not set
         if not isinstance(response, WebResponse):
@@ -122,19 +128,145 @@ class LetsEncryptResource(ACMEObject, WebInterface):
         self.setNonce(response)
         return response
 
+    def info(self):
+        self.request.setMethod("HEAD")
+        response = self.sendRequest()
+        # if request was failed, status is not set
+        if not isinstance(response, WebResponse):
+            return None
+        self.setNonce(response)
+        return response
+
     def payload(self):
         return None
 
+# 7.1.1.  Directory
+#
+# In order to help clients configure themselves with the right URLs for each
+# ACME operation, ACME servers provide a directory object.  This should be the
+# only URL needed to configure clients.  It is a JSON object, whose field names
+# are drawn from the following table and whose values are the corresponding URLs.
+#                    +------------+--------------------+
+#                    | Field      | URL in value       |
+#                    +------------+--------------------+
+#                    | newNonce   | New nonce          |
+#                    | newAccount | New account        |
+#                    | newOrder   | New order          |
+#                    | newAuthz   | New authorization  |
+#                    | revokeCert | Revoke certificate |
+#                    | keyChange  | Key change         |
+#                    +------------+--------------------+
+# https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-7.1.1
 class LetsEncryptDirectory(LetsEncryptResource):
 
-    def __init__(self):
+    def __init__(self, ACMEClass = ACMEDirectoryV2):
         super(LetsEncryptDirectory, self).__init__("directory")
-        self.resource = ACMEDirectory()
+        self.resource = ACMEClass()
 
     def send(self, data = None):
         super(LetsEncryptDirectory, self).send()
         return self.object()
 
+# To get a fresh nonce, the client sends a HEAD request to the new-nonce
+# resource on the server. The server's response MUST include a Replay-Nonce
+# header field containing a fresh nonce, and SHOULD have status code 200 (OK).
+# The server SHOULD also respond to GET requests for this resource, returning an
+# empty body (while still providing a Replay-Nonce header) with a 204
+# (No Content) status.
+class LetsEncryptNonceNew(LetsEncryptResource):
+
+    def __init__(self, url, name = "newNonce"):
+        super(LetsEncryptNonceNew, self).__init__(name, url)
+
+    def send(self, data = None):
+        return super(LetsEncryptNonceNew, self).info()
+
+# Servers MUST NOT respond to GET requests for account resources as these
+# requests are not authenticated.  If a client wishes to query the server for
+# information about its account (e.g., to examine the "contact" or "orders"
+# fields), then it SHOULD do so by sending a POST request with an empty update.
+# That is, it should send a JWS whose payload is an empty object ({}).
+# https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-7.3.3
+class LetsEncryptAccount(LetsEncryptResource):
+
+    def __init__(self, url, name = "reg"):
+        super(LetsEncryptAccount, self).__init__(name, url)
+
+    def payload(self, email = None, agreement = None ):
+        payload = {}
+        return json.dumps(payload)
+
+# https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-7.3
+class LetsEncryptAccountNew(LetsEncryptResource):
+
+    def __init__(self, url, name = "newAccount"):
+        super(LetsEncryptAccountNew, self).__init__(name, url)
+
+    def payload(self, email = None, agreement = None ):
+        payload = { "resource": self.getName() }
+
+        # contact (optional, array of string): An array of URLs that the server
+        # can use to contact the client for issues related to this account. For
+        # example, the server may wish to notify the client about server-
+        # initiated revocation or certificate expiration.
+        # The server SHOULD validate that the contact URLs in the "contact"
+        # field are valid and supported by the server. If the server validates
+        # contact URLs it MUST support the "mailto" scheme. Clients MUST NOT
+        # provide a "mailto" URL in the "contact" field that contains "hfields"
+        # [RFC6068], or more than one "addr-spec" in the "to" component. If a
+        # server encounters a "mailto" contact URL that does not meet these
+        # criteria, then it SHOULD reject it as invalid.
+        if email:
+            payload["contact"] = [ "mailto:%s" % email ]
+
+        # termsOfServiceAgreed (optional, boolean):  Including this field in a
+        # new-account request, with a value of true, indicates the client's
+        # agreement with the terms of service.  This field is not updateable
+        # by the client.
+        payload["termsOfServiceAgreed"] = True
+
+        return json.dumps(payload)
+
+    def send(self, data = None):
+        response = super(LetsEncryptAccountNew, self).send(data)
+        if response:
+            if response.getStatus() == 201:
+                self["reg"] = response["Location"]
+                links = response["Link"]
+                if isinstance(links, list):
+                    ( self["linkagreement"], ) = [ u.split(';')[0].strip("<>") for u in links if "terms-of-service" in u ]
+                elif "terms-of-service" in links:
+                    self["linkagreement"] = links.split(';')[0].strip("<>")
+        return response
+
+# If the server already has an account registered with the provided account key,
+# then it MUST return a response with a 200 (OK) status code and provide the URL
+# of that account in the Location header field. This allows a client that has an
+# account key but not the corresponding account URL to recover the account URL.
+# If a client wishes to find the URL for an existing account and does not want
+# an account to be created if one does not already exist, then it SHOULD do so
+# by sending a POST request to the new-account URL with a JWS whose payload has
+# an "onlyReturnExisting" field set to "true" ({"onlyReturnExisting": true}).
+# If a client sends such a request and an account does not exist, then the
+# server MUST return an error response with status code 400 (Bad Request) and
+# type "urn:ietf:params:acme:error:accountDoesNotExist".
+# https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-7.3.1
+class LetsEncryptAccountFinding(LetsEncryptResource):
+
+    def __init__(self, url, name = "newAccount"):
+        super(LetsEncryptAccountFinding, self).__init__(name, url)
+
+    def payload(self, email = None, agreement = None ):
+
+        # onlyReturnExisting (optional, boolean):  If this field is present with
+        # the value "true", then the server MUST NOT create a new account if one
+        # does not already exist.  This allows a client to look up an account
+        # URL based on an account key (see Section 7.3.1).
+        payload["onlyReturnExisting"] = True
+
+        return json.dumps(payload)
+
+# ACMEv1
 # https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-6.3
 class LetsEncryptRegistration(LetsEncryptResource):
 
@@ -151,6 +283,7 @@ class LetsEncryptRegistration(LetsEncryptResource):
             payload["agreement"] = agreement
         return json.dumps(payload)
 
+# ACMEv1
 class LetsEncryptRegistrationNew(LetsEncryptRegistration):
 
     def __init__(self, url):
@@ -161,7 +294,11 @@ class LetsEncryptRegistrationNew(LetsEncryptRegistration):
         if response:
             self["reg"] = response["Location"]
             if response.getStatus() == 201:
-                ( self["linkagreement"], ) = [ u.split(";")[0].strip("<>") for u in response["Link"] if "terms-of-service" in u ]
+                links = response["Link"]
+                if isinstance(links, list):
+                    ( self["linkagreement"], ) = [ u.split(';')[0].strip("<>") for u in links if "terms-of-service" in u ]
+                elif "terms-of-service" in links:
+                    self["linkagreement"] = links.split(';')[0].strip("<>")
         return response
 
 class LetsEncryptAuthorization(LetsEncryptResource):
@@ -258,9 +395,11 @@ class LetsEncrypt(BaseUtils, LogInterface):
     config = None
     signer = None
     directory = None
+    sslobject = None
+
     # always should consist last nonce returned by ACME service
     nonce = None
-    sslobject = None
+    kid = None
 
     def __init__(self, domain, config = None):
         super(LetsEncrypt, self).__init__()
@@ -280,7 +419,6 @@ class LetsEncrypt(BaseUtils, LogInterface):
         except TypeError:
             pass
 
-        # self.signer.loadPrivate(kpath)
         self.signer.loadPrivate(key)
         # key is loaded if we have its modulus and exponent available
         if self.signer.modulus():
@@ -294,23 +432,40 @@ class LetsEncrypt(BaseUtils, LogInterface):
         return key
 
     def send(self, resource, *args):
-        self.setLogEntry("send")  # debug
+        # debug
+        self.setLogEntry("send")
+
+        # additional JWS protected headers according to
+        # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.2
+        fields = {}
+        if self.nonce:
+            fields["nonce"] = self.nonce
+        if "url" in resource:
+            fields["url"] = resource["url"]
+        if self.kid:
+            fields["kid"] = self.kid
 
         payload = resource.payload(*args)
 
         jws = None
         if isinstance(payload, basestring):
-            jws = self.JWS(payload)
+            jws = self.JWS(payload, fields)
             self.debug("payload: %s" % payload)
             self.debug("jws: %s" % jws)
+
         response = resource.send(jws)
-        # update nonce
+
+        # update nonce after each sent request
         self.__updateNonce(resource)
+        self.__updateKID()
+
         if isinstance(response, WebResponse):
             self.warn("resource name: %s" % resource.getName())
             self.warn("response status: %s" % response.getStatus())
-            if response["Content-Type"] in ("application/json", "application/problem+json") \
-                or "text/plain" in response["Content-Type"]:
+            if "Content-Type" in response \
+                    and (response["Content-Type"] in ("application/json",
+                                                  "application/problem+json") \
+                    or "text/plain" in response["Content-Type"]):
                 self.warn("response body:\n%s" % response.getBody())
             for f in response:
                 self.debug("hdr: %s: %s" % (f, response[f]))
@@ -318,17 +473,48 @@ class LetsEncrypt(BaseUtils, LogInterface):
             self.debug("data: %s: %s" % (f, resource[f]))
         return response
 
+    # The "Replay-Nonce" header field includes a server-generated value that the
+    # server can use to detect unauthorized replay in future client requests.
+    # The server should generate the value provided in Replay-Nonce in such a
+    # way that they are unique to each message, with high probability.
+    # The value of the Replay-Nonce field MUST be an octet string encoded
+    # according to the base64url encoding described in Section 2 of [RFC7515].
+    # Clients MUST ignore invalid Replay-Nonce values.
+    #   base64url = [A-Z] / [a-z] / [0-9] / "-" / "_"
+    #   Replay-Nonce = *base64url
+    # The Replay-Nonce header field SHOULD NOT be included in HTTP request
+    # messages.
+    # https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-5.5.1
+    #
+    # nonce should be always up to date, therefore parameter response provides
+    # posibility to set nonce based on another operation response
+    def getNonce(self):
+        nonce = LetsEncryptNonceNew(self.directory)
+        return self.send(nonce)
+
+    def __updateNonce(self, resource):
+        if isinstance(resource, LetsEncryptResource) and resource["nonce"]:
+            self.nonce = resource["nonce"]
+
+    def __updateKID(self):
+        if "reg" in self.directory and not self.kid:
+            self.kid = self.directory["reg"]
+
     # def init(self, ctyp = "dns-01"):
     def init(self):
         # get RSA private key (generate if not exists)
         self.getKey()
         # get ACME directory data
         self.send(self.directory)
+        # get new nonce
+        self.getNonce()
         # propagate registration and uthorization URLs (if already set)
-        for r in ("reg", "authz"):
+        for r in ("authz", "reg"):
             url = self.config.domain(r)
             if url:
                 self.directory[r] = url
+        self.__updateKID()
+
 
     def getCSR(self, subj = None, bits = DEFAULT_KEY_SIZE):
 
@@ -370,34 +556,64 @@ class LetsEncrypt(BaseUtils, LogInterface):
     def joseHeader(self):
         return self.signer.joseHeader()
 
-    def JWSProtectedHeader(self, nonce = True):
+    # The JWS Protected Header MUST include the following fields:
+    # * "alg" (Algorithm)
+    # * "jwk" (JSON Web Key, for all requests not signed using an existing
+    #   account, e.g. newAccount)
+    # * "kid" (Key ID, for all requests signed using an existing account)
+    # * "nonce" (defined in Section 6.4 below)
+    # * "url" (defined in Section 6.3 below)
+    #
+    # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.2
+    def JWSProtectedHeader(self, fields):
         header = self.joseHeader()
-        if nonce:
-            header["nonce"] = self.nonce
+        if isinstance(fields, dict):
+            for f in ['kid', 'nonce', 'url']:
+                if f in fields:
+                    header[f] = fields[f]
+            # The "jwk" and "kid" fields are mutually exclusive. Servers MUST
+            # reject requests that contain both.
+            # For newAccount requests, and for revokeCert requests authenticated
+            # by certificate key, there MUST be a "jwk" field.  This field MUST
+            # contain the public key corresponding to the private key used to
+            # sign the JWS.
+            # For all other requests, the request is signed using an existing
+            # account and there MUST be a "kid" field.  This field MUST contain
+            # the account URL received by POSTing to the newAccount resource.
+            if 'kid' in header:
+                del header['jwk']
         return json.dumps(header)
 
     # ASCII(BASE64URL(UTF8(JWS Protected Header)) || '.' ||
     # BASE64URL(JWS Payload)).
-    def JWSSigningInput(self, payload, nonce = True):
+    def JWSSigningInput(self, payload, fields):
         if isinstance(payload, dict):
             payload = json.dumps(payload)
-        return self.base64urlencode(self.JWSProtectedHeader(nonce)) + "." + self.base64urlencode(payload)
+        return self.base64urlencode(self.JWSProtectedHeader(fields)) + "." + self.base64urlencode(payload)
 
-    def JWSSignature(self, payload, nonce = True):
-        signInput = self.JWSSigningInput(payload, nonce)
+    def JWSSignature(self, payload, fields):
+        signInput = self.JWSSigningInput(payload, fields)
         rawSignature = self.signer.sign(signInput)
         if rawSignature:
             return self.base64urlencode(rawSignature)
         return None
 
-    def JWS(self, payload, nonce = True):
+    # * The JWS MUST be in the Flattened JSON Serialization
+    # * The JWS MUST NOT have multiple signatures
+    # * The JWS Unencoded Payload Option [RFC7797] MUST NOT be used
+    #   https://tools.ietf.org/html/rfc7797#section-3
+    # * The JWS Unprotected Header MUST NOT be used
+    # * The JWS The JWS Payload MUST NOT be detached
+    #   https://tools.ietf.org/html/rfc7515#appendix-F
+    #
+    # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.2
+    def JWS(self, payload, fields = None):
         if isinstance(payload, dict):
             payload = json.dumps(payload)
         jws = {
             "payload": self.base64urlencode(payload),
-            "protected": self.base64urlencode(self.JWSProtectedHeader()),
-            "header": self.joseHeader(),
-            "signature": self.JWSSignature(payload, nonce)
+            "protected": self.base64urlencode(self.JWSProtectedHeader(fields)),
+            "signature": self.JWSSignature(payload, fields)
         }
         return json.dumps(jws)
 
@@ -414,10 +630,6 @@ class LetsEncrypt(BaseUtils, LogInterface):
             return self.config[ctyp]["token"] + "." + self.base64urlencode(self.signer.JWKThumbprint())
         return None
 
-    def __updateNonce(self, resource):
-        if isinstance(resource, LetsEncryptResource) and resource["nonce"]:
-            self.nonce = resource["nonce"]
-
     # The server creates a registration object with the included contact
     # information. The “key” element of the registration is set to the public
     # key used to verify the JWS (i.e., the “jwk” element of the JWS header).
@@ -430,6 +642,7 @@ class LetsEncrypt(BaseUtils, LogInterface):
     # noted above, the client may indicate its agreement with these terms by
     # updating its registration to include the “agreement” field, with the
     # terms URI as its value.
+    # ACMEv1
     def register(self, email = None):
         # check and set
         if isinstance(email, basestring):
@@ -457,6 +670,37 @@ class LetsEncrypt(BaseUtils, LogInterface):
             return status
         return None
 
+    def registerV2(self, email = None):
+        # check and set
+        if isinstance(email, basestring):
+            if not self.config.setContact(email):
+                return None
+        if self.config.contact():
+            newreg = LetsEncryptAccountNew(self.directory)
+
+            # For newAccount requests, and for revokeCert requests authenticated
+            # by certificate key, there MUST be a "jwk" field.
+            self.kid = None
+
+            response = self.send(newreg, email)
+            status = None
+            if response:
+                status = response.getStatus()
+            # store received data to configuration file
+            if status in (201, 409):
+                p = "reg"
+                self.config.setDomain(newreg[p], p)
+                # add registration URI into directory object manually
+                self.directory[p] = newreg[p]
+                if status == 201:
+                    for p in ("initialIp", "createdAt", "id"):
+                        self.config.setDomain(newreg[p], p)
+                    p = "linkagreement"
+                    self.config.setContact(newreg[p], p)
+            return status
+        return None
+
+    # ACME v1
     def agreement(self):
         reg = LetsEncryptRegistration(self.directory)
         response = self.send(reg, self.config.contact(), self.config.contact("linkagreement"))
@@ -471,6 +715,14 @@ class LetsEncrypt(BaseUtils, LogInterface):
 
     def checkRegistration(self):
         reg = LetsEncryptRegistration(self.directory)
+        response = self.send(reg)
+        status = None
+        if response:
+            status = response.getStatus()
+        return status
+
+    def checkRegistrationV2(self):
+        reg = LetsEncryptAccount(self.directory)
         response = self.send(reg)
         status = None
         if response:
