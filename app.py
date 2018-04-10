@@ -146,10 +146,10 @@ def main(argv = sys.argv[1:]):
         if status is None:
             log.warn("error: email address is not correct (mailto: %s)" % mailto)
             usage()
+    else:
+        app.checkRegistrationV2()
 
-    if not app.config.contact("agreement"):
-        # accept EULA
-        app.agreement()
+    sys.exit(0)
 
     if authz and (not app.config.domain("authz") or force):
         app.authorization()
