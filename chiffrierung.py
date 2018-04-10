@@ -164,9 +164,12 @@ class RSAKey(BaseUtils):
         if form not in ( "PEM", "DER" ):
             form = "DER"
         if isinstance(key, RSA._RSAobj):
+            kdata = key.exportKey(form)
             f = self.openfile(fname, "w")
-            f.write(key.exportKey(form))
+            f.write(kdata)
             f.close()
+            return kdata
+        return None
 
     def loadPrivate(self, key):
         if isinstance(key, basestring) and key:
@@ -197,8 +200,7 @@ class RSAKey(BaseUtils):
         return self.loadPublic(key)
 
     def savePrivateFile(self, fname, form = "DER"):
-        self.__saveKey(self.priv, fname, form)
-        return self
+        return self.__saveKey(self.priv, fname, form)
 
     def exportPrivate(self, form = "DER"):
         if isinstance(self.priv, RSA._RSAobj):
@@ -206,8 +208,7 @@ class RSAKey(BaseUtils):
         return None
 
     def savePublicFile(self, fname, form = "DER"):
-        self.__saveKey(self.pub, fname, form)
-        return self
+        return self.__saveKey(self.pub, fname, form)
 
     def exportPublic(self, form = "DER"):
         if isinstance(self.pub, RSA._RSAobj):
@@ -217,7 +218,7 @@ class RSAKey(BaseUtils):
     def generate(self, bits = DEFAULT_KEY_SIZE):
         self.priv = RSA.generate(bits)
         self.pub = self.priv.publickey()
-        return self
+        return self.priv
 
     # The "n" (modulus) parameter contains the modulus value for the RSA public
     # key
@@ -260,7 +261,13 @@ class RS256Signer(RSAKey):
         jwk = json.dumps(self.JWK(), indent = None, separators = (',', ':'), sort_keys = True)
         return hashlib.sha256(jwk).digest()
 
-    # The JWS Header or Protected Header MUST include “alg” and “jwk” fields
+    # * The JWS Protected Header MUST include the following fields:
+    #   - "alg" (Algorithm)
+    #   - "jwk" (JSON Web Key, for all requests not signed using an existing
+    #     account, e.g. newAccount)
+    # * The JWS MUST NOT have a Message Authentication Code (MAC)-based
+    #  algorithm in its "alg" field
+    #
     # https://letsencrypt.github.io/acme-spec/#terminology
     def joseHeader(self):
         return { "alg": "RS256", "jwk": self.JWK() }
