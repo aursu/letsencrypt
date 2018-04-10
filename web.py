@@ -197,7 +197,7 @@ class POSTData(WebData):
     def setData(self, data):
         if isinstance(data,  basestring) and data:
             self.__data = data
-            return data
+            return self.__data
         return None
 
     def reset(self):
@@ -483,7 +483,10 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
         return self.__post
 
     def setData(self, data):
-        self.__post.setData(data)
+        data = self.__post.setData(data)
+        if data:
+            self.setMethod("POST")
+        return data
 
     def path(self):
         path = "/"
@@ -560,7 +563,8 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
         # prepare urllib2.Request object
         r = urllib2.Request(url)
 
-        self.debug("URL: %s" % url, "WebRequest.prepare")
+        self.debug("URL: %s" % url, "prepare")
+        self.debug("request line: %s" % self.startLine())
 
         # propagate headers
         for h in self:
@@ -606,7 +610,7 @@ class WebRequest(HTTPMessage, WebResourceInterface, LogInterface):
             return self.url()
         return None
 
-class WebResponse(HTTPMessage):
+class WebResponse(HTTPMessage, LogInterface):
     __status = None
     __reason = None
 
@@ -674,6 +678,7 @@ class WebResponse(HTTPMessage):
             # set Status-Code and Reason-Phrase
             self.setStatus(response.code)
             self.setReason(response.msg)
+            self.debug("status line: %s" % self.startLine(), "populate")
             # set headers
             # h.gettype() - Content-Type header value (no header - "text/plain")
             # h.getencoding() - Content-Transfer-Encoding header value (no header - "7bit")
@@ -685,6 +690,7 @@ class WebResponse(HTTPMessage):
                     if ":" in i:
                         n, v = i.split(":", 1)
                         v = v.strip()
+                        self.debug("hdr: %s: %s" % (n, v))
                         self.add(n, v)
             # check if body also should be get from response object
             try:
