@@ -11,6 +11,7 @@ import os.path
 import json, hashlib, base64
 
 DEFAULT_KEY_SIZE = 2048
+# https://tools.ietf.org/html/rfc3339#section-5.6
 SSL_DATETIME_FORMAT = "%Y-%m-%dT00:00:00Z"
 
 class SSLObject(BaseUtils):
