@@ -8,15 +8,27 @@ import os.path
 # http://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior
 LOGSTAMP = "[%d/%b/%Y:%H:%M:%S %z]"
 
+class ANSIEscSeq(object):
+    FGRED    = '\033[31m'
+    FGGREEN  = '\033[32m'
+    FGYELLOW = '\033[33m'
+    FGBLUE   = '\033[34m'
+    NC       = '\033[0m'
+
 class LogUtils(BaseUtils):
     __entry = ""
     __entrysep = ""
     __dest = sys.stderr
     __std = True    # standard error output
+    __stdcolor = None
 
     def __init__(self, entry = None):
         super(LogUtils, self).__init__()
         self.logentry(entry)
+
+    def color(self, color):
+        self.__stdcolor = color
+        return self
 
     # set entry (like domain, hostname, user) for which logs entry gathered
     def logentry(self, entry = None ):
