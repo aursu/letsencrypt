@@ -93,7 +93,12 @@ def main(argv = sys.argv[1:]):
         if opt in ("h", "help"):
             usage()
         elif opt in ("d", "domain"):
-            domain = v
+            if isinstance(domain, list):
+                domain += [v]
+            elif isinstance(domain, basestring):
+                domain = [domain, v]
+            else:
+                domain = v
         elif opt in ("m", "mailto"):
             mailto = v
         elif opt in ("c", "config"):
@@ -139,7 +144,7 @@ def main(argv = sys.argv[1:]):
             log.warn("use config: %s" % appconfig)
 
     # if we are not registered yet (1st run for provided domain)
-    if not app.config.domain("reg"):
+    if not app.config.domain("account"):
         # registration
         log.warn("register domain %s" % domain)
         status = app.registerV2(mailto)
@@ -149,10 +154,10 @@ def main(argv = sys.argv[1:]):
     else:
         app.checkRegistrationV2()
 
-    sys.exit(0)
+    if authz and (not app.config.domain("order") or force):
+        app.authorizationV2()
 
-    if authz and (not app.config.domain("authz") or force):
-        app.authorization()
+    sys.exit(0)
 
     app.checkAuthorization()
 
