@@ -21,9 +21,9 @@ class LetsEncryptACME(WebResource):
 
 # https://community.letsencrypt.org/t/acme-v2-production-environment-wildcards/55578
 # https://tools.ietf.org/html/draft-ietf-acme-acme-10
-class LetsEncryptACMEV2(WebResource):
+class LetsEncryptACME2(WebResource):
     def __init__(self):
-        super(LetsEncryptACMEV2, self).__init__("acme-v02.api.letsencrypt.org")
+        super(LetsEncryptACME2, self).__init__("acme-v02.api.letsencrypt.org")
         self.secure(True)
 
 # In order to help clients configure themselves with the right URIs for each
@@ -40,9 +40,9 @@ class ACMEDirectory(LetsEncryptACME):
         super(ACMEDirectory, self).__init__()
         self.setPath("directory")
 
-class ACMEDirectoryV2(LetsEncryptACMEV2):
+class ACMEDirectory2(LetsEncryptACME2):
     def __init__(self):
-        super(ACMEDirectoryV2, self).__init__()
+        super(ACMEDirectory2, self).__init__()
         self.setPath("directory")
 
 class ACMEObject(JSONParser):
@@ -91,11 +91,15 @@ class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
                 # the URL.
                 #
                 # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-6.3.1
+                #
+                # set "url" field only if resource exists in directory object
                 self["url"] = url
 
         if isinstance(url, basestring) and url:
             self.setURL(url)
 
+    # Any Let's Encrypt resource has name (either declared in Directory object
+    # or set manually)
     def getName(self):
         return self.__name
 
@@ -111,16 +115,21 @@ class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
         if isinstance(response, WebResponse) and "Replay-Nonce" in response:
             self["nonce"] = response["Replay-Nonce"]
 
-    def send(self, data = None):
+    # send request to Let's Encrypt API, update "nonce", parse received JSON
+    # object
+    # return value is WebResponse object
+    def send(self, jws = None):
+        # set it to GET in order to reset request object to default state
         self.request.setMethod("GET")
+
         # Because client requests in ACME carry JWS objects in the Flattened
         # JSON Serialization, they must have the "Content-Type" header field set
         # to "application/jose+json". If a request does not meet this
         # requirement, then the server MUST return a response with status code
         # 415 (Unsupported Media Type).
-        if data:
+        if jws:
             self.request["Content-Type"] = "application/jose+json"
-        response = self.sendRequest(data)
+        response = self.sendRequest(jws)
         # if request was failed, status is not set
         if not isinstance(response, WebResponse):
             return None
@@ -159,9 +168,9 @@ class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
 # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-7.1.1
 class LetsEncryptDirectory(LetsEncryptResource):
 
-    def __init__(self, ACMEClass = ACMEDirectoryV2):
+    def __init__(self, DirectoryClass = ACMEDirectory2):
         super(LetsEncryptDirectory, self).__init__("directory")
-        self.resource = ACMEClass()
+        self.resource = DirectoryClass()
 
     def send(self, data = None):
         super(LetsEncryptDirectory, self).send()
@@ -189,7 +198,7 @@ class LetsEncryptNonceNew(LetsEncryptResource):
 # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-7.3.3
 class LetsEncryptAccount(LetsEncryptResource):
 
-    def __init__(self, url, name = "reg"):
+    def __init__(self, url, name = "account"):
         super(LetsEncryptAccount, self).__init__(name, url)
 
     def payload(self, email = None, agreement = None ):
@@ -203,8 +212,7 @@ class LetsEncryptAccountNew(LetsEncryptResource):
         super(LetsEncryptAccountNew, self).__init__(name, url)
 
     def payload(self, email = None, agreement = None ):
-        payload = { "resource": self.getName() }
-
+        payload = {}
         # contact (optional, array of string): An array of URLs that the server
         # can use to contact the client for issues related to this account. For
         # example, the server may wish to notify the client about server-
@@ -223,6 +231,7 @@ class LetsEncryptAccountNew(LetsEncryptResource):
         # new-account request, with a value of true, indicates the client's
         # agreement with the terms of service.  This field is not updateable
         # by the client.
+        # Let's Encrypt CA requires to confirm agreement
         payload["termsOfServiceAgreed"] = True
 
         return json.dumps(payload)
@@ -231,10 +240,18 @@ class LetsEncryptAccountNew(LetsEncryptResource):
         response = super(LetsEncryptAccountNew, self).send(data)
         if response:
             if response.getStatus() == 201:
-                self["reg"] = response["Location"]
+                # The server creates an account and stores the public key used
+                # to verify the JWS (i.e., the "jwk" element of the JWS header)
+                # to authenticate future requests from the account.  The server
+                # returns this account object in a 201 (Created) response, with
+                # the account URL in a Location header field. The account URL is
+                # used as the "kid" value in the JWS authenticating subsequent
+                # requests by this account (See Section 6.2).
+                # https://tools.ietf.org/html/draft-ietf-acme-acme-10#section-7.3
+                self["account"] = response["Location"]
                 links = response["Link"]
                 if isinstance(links, list):
-                    ( self["linkagreement"], ) = [ u.split(';')[0].strip("<>") for u in links if "terms-of-service" in u ]
+                    (self["linkagreement"], ) = [ l.split(';')[0].strip("<>") for l in links if "terms-of-service" in l ]
                 elif "terms-of-service" in links:
                     self["linkagreement"] = links.split(';')[0].strip("<>")
         return response
@@ -296,11 +313,12 @@ class LetsEncryptRegistrationNew(LetsEncryptRegistration):
             if response.getStatus() == 201:
                 links = response["Link"]
                 if isinstance(links, list):
-                    ( self["linkagreement"], ) = [ u.split(';')[0].strip("<>") for u in links if "terms-of-service" in u ]
+                    (self["linkagreement"], ) = [ u.split(';')[0].strip("<>") for u in links if "terms-of-service" in u ]
                 elif "terms-of-service" in links:
                     self["linkagreement"] = links.split(';')[0].strip("<>")
         return response
 
+# ACMEv1
 class LetsEncryptAuthorization(LetsEncryptResource):
 
     def __init__(self, url, name = "authz"):
@@ -312,6 +330,7 @@ class LetsEncryptAuthorization(LetsEncryptResource):
             payload["identifier"] = { "type": "dns", "value": domain }
         return json.dumps(payload)
 
+# ACMEv1
 # https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-6.5
 class LetsEncryptAuthorizationNew(LetsEncryptAuthorization):
 
@@ -324,6 +343,7 @@ class LetsEncryptAuthorizationNew(LetsEncryptAuthorization):
             self["authz"] = response["Location"]
         return response
 
+# ACMEv1
 # https://tools.ietf.org/html/draft-ietf-acme-acme-01#section-6.5
 class LetsEncryptAuthorizationCheck(LetsEncryptAuthorization):
 
@@ -332,6 +352,44 @@ class LetsEncryptAuthorizationCheck(LetsEncryptAuthorization):
 
     def payload(self):
         return None
+
+# The client requests certificate issuance by sending a POST request to the
+# server's new-order resource. The body of the POST is a JWS object whose JSON
+# payload is a subset of the order object defined in Section 7.1.3, containing
+# the fields that describe the certificate to be issued:
+#
+# identifiers (required, array of object):  An array of identifier objects that
+#   the client wishes to submit an order for.
+#   - type (required, string):  The type of identifier.
+#   - value (required, string):  The identifier itself.
+#
+# notBefore (optional, string):  The requested value of the notBefore field in
+#   the certificate, in the date format defined in [RFC3339].
+#
+# notAfter (optional, string):  The requested value of the notAfter field in the
+#   certificate, in the date format defined in [RFC3339].
+#
+# notBefore and notAfter are not supported by Let's Encrypt API
+class LetsEncryptOrderNew(LetsEncryptResource):
+
+    def __init__(self, url, name = "newOrder"):
+        super(LetsEncryptOrderNew, self).__init__(name, url)
+
+    def payload(self, identifiers, period = 365):
+        payload = {}
+        if isinstance(identifiers, basestring):
+            identifiers = [identifiers]
+
+        payload["identifiers"] = []
+        for domain in identifiers:
+            payload["identifiers"] += [{"type": "dns", "value": domain}]
+        return json.dumps(payload)
+
+    def send(self, jws = None):
+        response = super(LetsEncryptOrderNew, self).send(jws)
+        if response:
+            self["order"] = response["Location"]
+        return response
 
 class LetsEncryptChallenge(LetsEncryptResource):
 
@@ -497,8 +555,8 @@ class LetsEncrypt(BaseUtils, LogInterface):
             self.nonce = resource["nonce"]
 
     def __updateKID(self):
-        if "reg" in self.directory and not self.kid:
-            self.kid = self.directory["reg"]
+        if "account" in self.directory and not self.kid:
+            self.kid = self.directory["account"]
 
     # def init(self, ctyp = "dns-01"):
     def init(self):
@@ -509,7 +567,7 @@ class LetsEncrypt(BaseUtils, LogInterface):
         # get new nonce
         self.getNonce()
         # propagate registration and uthorization URLs (if already set)
-        for r in ("authz", "reg"):
+        for r in ("order", "account"):
             url = self.config.domain(r)
             if url:
                 self.directory[r] = url
@@ -688,7 +746,7 @@ class LetsEncrypt(BaseUtils, LogInterface):
                 status = response.getStatus()
             # store received data to configuration file
             if status in (201, 409):
-                p = "reg"
+                p = "account"
                 self.config.setDomain(newreg[p], p)
                 # add registration URI into directory object manually
                 self.directory[p] = newreg[p]
@@ -744,6 +802,28 @@ class LetsEncrypt(BaseUtils, LogInterface):
             self.config.setDomain(auth[p], p)
             # add authorization URI into directory object manually
             self.directory["authz"] = auth[p]
+            # challenges
+            for p in ("status", "expires"):
+                self.config.setChallenges(auth[p], p)
+            challenges = auth["challenges"]
+            # store supported challenges types
+            self.config.setChallenges(",".join([ c["type"] for c in challenges ]))
+            # store challenges
+            for c in challenges:
+                self.config[c["type"]] = c
+        return status
+
+    def authorizationV2(self):
+        auth = LetsEncryptOrderNew(self.directory)
+        response = self.send(auth, self.config.domain())
+        status = None
+        if response:
+            status = response.getStatus()
+        if status == 201:
+            p = "order"
+            self.config.setDomain(auth[p], p)
+            # add authorization URI into directory object manually
+            self.directory["order"] = auth[p]
             # challenges
             for p in ("status", "expires"):
                 self.config.setChallenges(auth[p], p)
