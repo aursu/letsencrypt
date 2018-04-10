@@ -141,7 +141,8 @@ def main(argv = sys.argv[1:]):
     # if we are not registered yet (1st run for provided domain)
     if not app.config.domain("reg"):
         # registration
-        status = app.register(mailto)
+        log.warn("register domain %s" % domain)
+        status = app.registerV2(mailto)
         if status is None:
             log.warn("error: email address is not correct (mailto: %s)" % mailto)
             usage()
