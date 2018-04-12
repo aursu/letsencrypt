@@ -43,20 +43,23 @@ class Utils(object):
             return self.__defs[key]
         return None
 
+    def delete(self, key):
+        if key in self.__keys:
+            i = self.__keys.index(key)
+            del self.__keys[i]
+            del self.__defs[key]
+
     def __setitem__(self, key, value):
         self.set(key, value)
 
     def __getitem__(self, key):
         return self.get(key)
 
-    def __getattr__(self, name):
-        return self[name]
+    # def __getattr__(self, name):
+    #     return self[name]
 
     def __delitem__(self, key):
-        if key in self.__keys:
-            i = self.__keys.index(key)
-            del self.__keys[i]
-            del self.__defs[key]
+        self.delete(key)
 
     def __len__(self):
         return len(self.__keys)
@@ -85,6 +88,14 @@ class Utils(object):
     def __del__(self):
         pass
 
+    def setup(self, data):
+        if isinstance(data, dict) or isinstance(data, Utils):
+            self.reset()
+            for k in data:
+                self.set(k, data[k])
+            return data
+        return None
+
 class UtilsCI(object):
     __defs = None
     __keys = None
@@ -112,6 +123,14 @@ class UtilsCI(object):
             return self.__defs[key.lower()]
         return None
 
+    def delete(self, key):
+        if key.lower() in self.__defs:
+            del self.__defs[key.lower()]
+            for k in self.__keys:
+                if k.lower() == key.lower():
+                    i = self.__keys.index(k)
+                    del self.__keys[i]
+
     def __setitem__(self, key, value):
         self.set(key, value)
 
@@ -119,12 +138,7 @@ class UtilsCI(object):
         return self.get(key)
 
     def __delitem__(self, key):
-        if key.lower() in self.__defs:
-            del self.__defs[key.lower()]
-            for k in self.__keys:
-                if k.lower() == key.lower():
-                    i = self.__keys.index(k)
-                    del self.__keys[i]
+        self.delete(key)
 
     def __len__(self):
         return len(self.__keys)
@@ -152,6 +166,14 @@ class UtilsCI(object):
 
     def ksort(self):
         self.__keys.sort()
+
+    def setup(self, data):
+        if isinstance(data, dict) or isinstance(data, Utils):
+            self.reset()
+            for k in data:
+                self.set(k, data[k])
+            return data
+        return None
 
 # JavaScript array partial emulation (only add/get functionality along with
 # iteration, length and string representation)
