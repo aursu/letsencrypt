@@ -6,6 +6,85 @@ import re
 from utils import BaseUtils
 import ConfigParser
 from chiffrierung import DEFAULT_KEY_SIZE
+from parsers import Parser
+
+# emulate ConfigParser standard class interface (partially)
+# ConfigFileParser is interface because method loads() is not overridden
+class ConfigFileParser(Parser):
+
+    __sections = None
+    __defaults = None
+
+    def __init__(self):
+        super(Parser, self).__init__()
+        self.reset()
+
+    # method setup() is in use by method parse() to setup already parsed and
+    # validated data into self object
+    # method setup() provided by class Utils
+    # method parse() provided by class Parser
+    def setup(self, data):
+        if isinstance(data, dict) or isinstance(data, Utils):
+            self.reset()
+            for s in data:
+                if isinstance(data[s], dict):
+                    self.__sections += [s]
+                else:
+                    self.__defaults += [(s, data[s])]
+                self.set(s, data[s])
+            return data
+        return None
+
+    def reset(self):
+        self.__sections = []
+        self.__defaults = []
+        super(ConfigFileParser, self).reset()
+
+    # partially match RawConfigParser.read
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.read
+    def read(self, filename):
+        self.parse(filename)
+
+    # partially match RawConfigParser.sections
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.sections
+    def sections(self):
+        return self.__sections
+
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.has_section
+    def has_section(self, section):
+        return section in self.__sections
+
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.items
+    def items(self, section):
+        # basic validation
+        if not (isinstance(section, basestring) and section and self.valid()):
+            return None
+
+        # no section - not items
+        if not self.has_section(section):
+            return None
+
+        return [(s, items[s]) for s in self[section]]
+
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.remove_section
+    def remove_section(self, section):
+        if not self.has_section(section):
+            return False
+
+        del self[section]
+        self.__sections.remove(section)
+
+        return True
+
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.add_section
+    def add_section(self, section):
+        if self.has_section(section):
+            return False
+
+        self[section] = {}
+        self.__sections += [section]
+
+        return True
 
 # .INI (or .CNF) files support
 class Configuration(BaseUtils):
