@@ -53,19 +53,11 @@ class ACMEObject(JSONParser):
         self.feed(data)
 
     def feed(self, data):
-        self.reset()
-        if isinstance(data, basestring) and data:
-            self.fromstring(data)
-            # propagate received data from parser into ACMEObject itself
-            if self.jsonobj:
-                for f in self.jsonobj:
-                    self[f] = self.jsonobj[f]
-                return self.jsonobj
-        return None
+        return self.fromstring(data)
 
-    # returned by ACME dictionary object should be dictionary
-    def valid(self):
-        return isinstance(self.jsonobj, dict)
+    # returned by ACME object always should be a dictionary
+    def valid(self, data):
+        return isinstance(data, dict)
 
 class LetsEncryptResource(ACMEObject, WebInterface, LogInterface):
 
@@ -171,10 +163,6 @@ class LetsEncryptDirectory(LetsEncryptResource):
     def __init__(self, DirectoryClass = ACMEDirectory2):
         super(LetsEncryptDirectory, self).__init__("directory")
         self.resource = DirectoryClass()
-
-    def send(self, data = None):
-        super(LetsEncryptDirectory, self).send()
-        return self.object()
 
 # To get a fresh nonce, the client sends a HEAD request to the new-nonce
 # resource on the server. The server's response MUST include a Replay-Nonce
