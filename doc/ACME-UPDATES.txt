@@ -762,81 +762,72 @@ transaction, then it SHOULD reflect that authorization in all of the orders.
 
 7.1.4.  Authorization Objects
 
-An ACME authorization object represents a server's authorization for
-an account to represent an identifier.  In addition to the
-identifier, an authorization includes several metadata fields, such
-as the status of the authorization (e.g., "pending", "valid", or
-"revoked") and which challenges were used to validate possession of
-the identifier.
+An ACME authorization object represents a server's authorization for an account
+to represent an identifier. In addition to the identifier, an authorization
+includes several metadata fields, such as the status of the authorization (e.g.,
+"pending", "valid", or "revoked") and which challenges were used to validate
+possession of the identifier.
 
 The structure of an ACME authorization resource is as follows:
 
-identifier (required, object):  The identifier that the account is
-   authorized to represent
+identifier (required, object):  The identifier that the account is authorized to
+  represent
+  - type (required, string):  The type of identifier.
+  - value (required, string):  The identifier itself.
 
-   type (required, string):  The type of identifier.
+status (required, string):  The status of this authorization. Possible values
+  are: "pending", "valid", "invalid", "deactivated", "expired", and "revoked".
 
-   value (required, string):  The identifier itself.
+expires (optional, string):  The timestamp after which the server will consider
+  this authorization invalid, encoded in the format specified in RFC 3339
+  [RFC3339].  This field is REQUIRED for objects with "valid" in the "status"
+  field.
 
-status (required, string):  The status of this authorization.
-   Possible values are: "pending", "valid", "invalid", "deactivated",
-   "expired", and "revoked".
+challenges (required, array of objects):  For pending authorizations, the
+  challenges that the client can fulfill in order to prove possession of the
+  identifier.  For final authorizations (in the "valid" or "invalid" state),
+  the challenges that were used. Each array entry is an object with parameters
+  required to validate the challenge. A client should attempt to fulfill one of
+  these challenges, and a server should consider any one of the challenges
+  sufficient to make the authorization valid. For final authorizations, it
+  contains the challenges that were successfully completed.
 
-expires (optional, string):  The timestamp after which the server
-   will consider this authorization invalid, encoded in the format
-   specified in RFC 3339 [RFC3339].  This field is REQUIRED for
-   objects with "valid" in the "status" field.
+wildcard (optional, boolean):  For authorizations created as a result of a
+  newOrder request containing a DNS identifier with a value that contained a
+  wildcard prefix this field MUST be present, and true.
 
-challenges (required, array of objects):  For pending authorizations,
-   the challenges that the client can fulfill in order to prove
-   possession of the identifier.  For final authorizations (in the
-   "valid" or "invalid" state), the challenges that were used.  Each
-   array entry is an object with parameters required to validate the
-   challenge.  A client should attempt to fulfill one of these
-   challenges, and a server should consider any one of the challenges
-   sufficient to make the authorization valid.  For final
-   authorizations, it contains the challenges that were successfully
-   completed.
-
-wildcard (optional, boolean):  For authorizations created as a result
-   of a newOrder request containing a DNS identifier with a value
-   that contained a wildcard prefix this field MUST be present, and
-   true.
-
-The only type of identifier defined by this specification is a fully-
-qualified domain name (type: "dns").  If a domain name contains non-
-ASCII Unicode characters it MUST be encoded using the rules defined
-in [RFC3492].  Servers MUST verify any identifier values that begin
-with the ASCII Compatible Encoding prefix "xn--" as defined in
-[RFC5890] are properly encoded.  Wildcard domain names (with "*" as
-the first label) MUST NOT be included in authorization objects.  If
-an authorization object conveys authorization for the base domain of
-a newOrder DNS type identifier with a wildcard prefix then the
-optional authorizations "wildcard" field MUST be present with a value
-of true.
+The only type of identifier defined by this specification is a fully-qualified
+domain name (type: "dns"). If a domain name contains non-ASCII Unicode
+characters it MUST be encoded using the rules defined in [RFC3492]. Servers MUST
+verify any identifier values that begin with the ASCII Compatible Encoding
+prefix "xn--" as defined in [RFC5890] are properly encoded. Wildcard domain
+names (with "*" as the first label) MUST NOT be included in authorization
+objects. If an authorization object conveys authorization for the base domain of
+a newOrder DNS type identifier with a wildcard prefix then the optional
+authorizations "wildcard" field MUST be present with a value of true.
 
 Section 8 describes a set of challenges for domain name validation.
 
 {
-  "status": "valid",
-  "expires": "2015-03-01T14:09:00Z",
+    "status": "valid",
+    "expires": "2015-03-01T14:09:00Z",
 
-  "identifier": {
-    "type": "dns",
-    "value": "example.org"
-  },
+    "identifier": {
+        "type": "dns",
+        "value": "example.org"
+    },
 
-  "challenges": [
-    {
-      "url": "https://example.com/acme/authz/1234/0",
-      "type": "http-01",
-      "status": "valid",
-      "token": "DGyRejmCefe7v4NfDGDKfA",
-      "validated": "2014-12-01T12:05:00Z"
-    }
-  ],
+    "challenges": [
+        {
+            "url": "https://example.com/acme/authz/1234/0",
+            "type": "http-01",
+            "status": "valid",
+            "token": "DGyRejmCefe7v4NfDGDKfA",
+            "validated": "2014-12-01T12:05:00Z"
+        }
+    ],
 
-  "wildcard": false
+    "wildcard": false
 }
 
 7.1.5.  Challenge Objects
@@ -991,13 +982,12 @@ order to prevent caching of this resource.
 
 7.3.  Account Creation
 
-A client creates a new account with the server by sending a POST
-request to the server's new-account URL.  The body of the request is
-a stub account object optionally containing the "contact" and
-"termsOfServiceAgreed" fields.
+A client creates a new account with the server by sending a POST request to the
+server's new-account URL.  The body of the request is a stub account object
+optionally containing the "contact" and "termsOfServiceAgreed" fields.
 
-contact (optional, array of string):  Same meaning as the
-   corresponding server field defined in Section 7.1.2
+contact (optional, array of string):  Same meaning as the corresponding server
+  field defined in Section 7.1.2
 
 termsOfServiceAgreed (optional, boolean):  Same meaning as the
    corresponding server field defined in Section 7.1.2
@@ -1425,95 +1415,90 @@ deactivated account.
 
 7.4.  Applying for Certificate Issuance
 
-The client requests certificate issuance by sending a POST request to
-the server's new-order resource.  The body of the POST is a JWS
-object whose JSON payload is a subset of the order object defined in
-Section 7.1.3, containing the fields that describe the certificate to
-be issued:
+The client requests certificate issuance by sending a POST request to the
+server's new-order resource. The body of the POST is a JWS object whose JSON
+payload is a subset of the order object defined in Section 7.1.3, containing the
+fields that describe the certificate to be issued:
 
-identifiers (required, array of object):  An array of identifier
-   objects that the client wishes to submit an order for.
+identifiers (required, array of object):  An array of identifier objects that
+  the client wishes to submit an order for.
+  - type (required, string):  The type of identifier.
+  - value (required, string):  The identifier itself.
 
-   type (required, string):  The type of identifier.
+notBefore (optional, string):  The requested value of the notBefore field in the
+  certificate, in the date format defined in [RFC3339].
 
-   value (required, string):  The identifier itself.
-
-notBefore (optional, string):  The requested value of the notBefore
-   field in the certificate, in the date format defined in [RFC3339].
-
-notAfter (optional, string):  The requested value of the notAfter
-   field in the certificate, in the date format defined in [RFC3339].
+notAfter (optional, string):  The requested value of the notAfter field in the
+  certificate, in the date format defined in [RFC3339].
 
 POST /acme/new-order HTTP/1.1
 Host: example.com
 Content-Type: application/jose+json
 
 {
-  "protected": base64url({
-    "alg": "ES256",
-    "kid": "https://example.com/acme/acct/1",
-    "nonce": "5XJ1L3lEkMG7tR6pA00clA",
-    "url": "https://example.com/acme/new-order"
-  }),
-  "payload": base64url({
-    "identifiers": [
-      { "type": "dns", "value": "example.com" }
-    ],
-    "notBefore": "2016-01-01T00:00:00Z",
-    "notAfter": "2016-01-08T00:00:00Z"
-  }),
-  "signature": "H6ZXtGjTZyUnPeKn...wEA4TklBdh3e454g"
+    "protected": base64url({
+        "alg": "ES256",
+        "kid": "https://example.com/acme/acct/1",
+        "nonce": "5XJ1L3lEkMG7tR6pA00clA",
+        "url": "https://example.com/acme/new-order"
+    }),
+    "payload": base64url({
+        "identifiers": [
+            { "type": "dns", "value": "example.com" }
+        ],
+        "notBefore": "2016-01-01T00:00:00Z",
+        "notAfter": "2016-01-08T00:00:00Z"
+    }),
+    "signature": "H6ZXtGjTZyUnPeKn...wEA4TklBdh3e454g"
 }
 
-The server MUST return an error if it cannot fulfill the request as
-specified, and MUST NOT issue a certificate with contents other than
-those requested.  If the server requires the request to be modified
-in a certain way, it should indicate the required changes using an
-appropriate error type and description.
+The server MUST return an error if it cannot fulfill the request as specified,
+and MUST NOT issue a certificate with contents other than those requested. If
+the server requires the request to be modified in a certain way, it should
+indicate the required changes using an appropriate error type and description.
 
-If the server is willing to issue the requested certificate, it
-responds with a 201 (Created) response.  The body of this response is
-an order object reflecting the client's request and any
-authorizations the client must complete before the certificate will
-be issued.
+If the server is willing to issue the requested certificate, it responds with a
+201 (Created) response. The body of this response is an order object reflecting
+the client's request and any authorizations the client must complete before the
+certificate will be issued.
 
 HTTP/1.1 201 Created
 Replay-Nonce: MYAuvOpaoIiywTezizk5vw
 Location: https://example.com/acme/order/asdf
 
 {
-  "status": "pending",
-  "expires": "2016-01-01T00:00:00Z",
+    "status": "pending",
+    "expires": "2016-01-01T00:00:00Z",
 
-  "notBefore": "2016-01-01T00:00:00Z",
-  "notAfter": "2016-01-08T00:00:00Z",
+    "notBefore": "2016-01-01T00:00:00Z",
+    "notAfter": "2016-01-08T00:00:00Z",
 
-  "identifiers": [
-    { "type": "dns", "value": "example.com" },
-    { "type": "dns", "value": "www.example.com" }
-  ],
+    "identifiers": [
+        { "type": "dns", "value": "example.com" },
+        { "type": "dns", "value": "www.example.com" }
+    ],
 
-  "authorizations": [
-    "https://example.com/acme/authz/1234",
-    "https://example.com/acme/authz/2345"
-  ],
+    "authorizations": [
+        "https://example.com/acme/authz/1234",
+        "https://example.com/acme/authz/2345"
+    ],
 
-  "finalize": "https://example.com/acme/order/asdf/finalize"
+    "finalize": "https://example.com/acme/order/asdf/finalize"
 }
 
-The order object returned by the server represents a promise that if
-the client fulfills the server's requirements before the "expires"
-time, then the server will be willing to finalize the order upon
-request and issue the requested certificate.  In the order object,
-any authorization referenced in the "authorizations" array whose
-status is "pending" represents an authorization transaction that the
-client must complete before the server will issue the certificate
-(see Section 7.5).  If the client fails to complete the required
-actions before the "expires" time, then the server SHOULD change the
-status of the order to "invalid" and MAY delete the order resource.
+The order object returned by the server represents a promise that if the client
+fulfills the server's requirements before the "expires" time, then the server
+will be willing to finalize the order upon request and issue the requested
+certificate. In the order object, any authorization referenced in the
+"authorizations" array whose status is "pending" represents an authorization
+transaction that the client must complete before the server will issue the
+certificate (see Section 7.5). If the client fails to complete the required
+actions before the "expires" time, then the server SHOULD change the status of
+the order to "invalid" and MAY delete the order resource.
 
-Once the client believes it has fulfilled the server's requirements,
-it should send a POST request to the order resource's finalize URL.
+Once the client believes it has fulfilled the server's requirements, it should
+send a POST request to the order resource's finalize URL.
+
 The POST body MUST include a CSR:
 
 csr (required, string):  A CSR encoding the parameters for the
@@ -1539,41 +1524,36 @@ Content-Type: application/jose+json
   "signature": "uOrUfIIk5RyQ...nw62Ay1cl6AB"
 }
 
-The CSR encodes the client's requests with regard to the content of
-the certificate to be issued.  The CSR MUST indicate the exact same
-set of requested identifiers as the initial new-order request, either
-in the commonName portion of the requested subject name, or in an
-extensionRequest attribute [RFC2985] requesting a subjectAltName
-extension.
+The CSR encodes the client's requests with regard to the content of the
+certificate to be issued. The CSR MUST indicate the exact same set of requested
+identifiers as the initial new-order request, either in the commonName portion
+of the requested subject name, or in an extensionRequest attribute [RFC2985]
+requesting a subjectAltName extension.
 
-A request to finalize an order will result in error if the order
-indicated does not have status "ready", if the CSR and order
-identifiers differ, or if the account is not authorized for the
-identifiers indicated in the CSR.
+A request to finalize an order will result in error if the order indicated does
+not have status "ready", if the CSR and order identifiers differ, or if the
+account is not authorized for the identifiers indicated in the CSR.
 
-A valid request to finalize an order will return the order to be
-finalized.  The client should begin polling the order by sending a
-GET request to the order resource to obtain its current state.  The
-status of the order will indicate what action the client should take:
+A valid request to finalize an order will return the order to be finalized. The
+client should begin polling the order by sending a GET request to the order
+resource to obtain its current state. The status of the order will indicate what
+action the client should take:
 
-o  "invalid": The certificate will not be issued.  Consider this
-   order process abandoned.
+  * "invalid": The certificate will not be issued. Consider this order process
+    abandoned.
 
-o  "pending": The server does not believe that the client has
-   fulfilled the requirements.  Check the "authorizations" array for
-   entries that are still pending.
+  * "pending": The server does not believe that the client has fulfilled the
+    requirements. Check the "authorizations" array for entries that are still
+    pending.
 
-o  "ready": The server agrees that the requirements have been
-   fulfilled, and is awaiting finalization.  Submit a finalization
-   request.
+  * "ready": The server agrees that the requirements have been fulfilled, and is
+    awaiting finalization. Submit a finalization request.
 
-o  "processing": The certificate is being issued.  Send a GET request
-   after the time given in the "Retry-After" header field of the
-   response, if any.
+  * "processing": The certificate is being issued. Send a GET request after the
+    time given in the "Retry-After" header field of the response, if any.
 
-o  "valid": The server has issued the certificate and provisioned its
-   URL to the "certificate" field of the order.  Download the
-   certificate.
+  * "valid": The server has issued the certificate and provisioned its URL to
+    the "certificate" field of the order. Download the certificate.
 
 HTTP/1.1 200 OK
 Replay-Nonce: CGf81JWBsq8QyIgPCi9Q9X
