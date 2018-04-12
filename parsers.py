@@ -5,45 +5,91 @@ import xml.parsers.expat
 from utils import BaseUtils
 from HTMLParser import HTMLParser
 import json
+import yaml
 
-class JSONParser(BaseUtils):
-
-    jsonobj = None
+class Parser(BaseUtils):
 
     def __init__(self):
-        super(JSONParser, self).__init__()
+        super(Parser, self).__init__()
 
-    def object(self):
-        if self.valid():
-            return self.jsonobj
-        return None
+    # return response data validation status: True if data is valid
+    # should be overridden in child class
+    def valid(self, root = None):
+        return isinstance(root, dict)
 
-    # return response data status: valid or not
-    def valid(self):
-        # should be overrided in child class
-        return True
+    # parse text and return parsed object
+    # should be overridden in child class
+    def loads(self, text):
+        raise NotImplementedError
 
-    def parse(self, source = None):
-        tmpfh = self.openfile(source)
+    # read and parse data from file handle and return parsed object
+    # could be overridden in child class
+    def load(self, fileh):
+        text = fileh.read()
+        return self.loads(text)
+
+    # parse file
+    def parse(self, filename):
+        tmpfh = self.openfile(filename)
         if tmpfh:
             try:
-                self.jsonobj = json.load(tmpfh)
+                root = self.load(tmpfh)
+                if self.valid(root):
+                    self.setup(root)
+                    tmpfh.close()   # close file before return
+                    return root
             except ValueError:
                 pass
             tmpfh.close()
-        return self.jsonobj
+        return None
 
     def fromstring(self, text):
         if isinstance(text, basestring) and text:
             try:
-                self.jsonobj  = json.loads(text)
+                root = self.loads(text)
+                if self.valid(root):
+                    self.setup(root)
+                    return root
             except ValueError:
                 pass
-        return self.jsonobj
+        return None
 
-    def reset(self):
-        super(JSONParser, self).reset()
-        self.jsonobj = None
+class JSONParser(Parser):
+
+    def __init__(self):
+        super(JSONParser, self).__init__()
+
+    def load(self, fileh):
+        return json.load(fileh)
+
+    def loads(self, text):
+        return json.loads(text)
+
+    def valid(self, root = None):
+        return (isinstance(root, dict) or isinstance(root, list))
+
+    # to support integer indexes as well (allow us to support Python list
+    # for initialization)
+    def set(self, key, value):
+        return super(JSONParser, self).set(str(key), value)
+
+    def setup(self, data):
+        if isinstance(data, list):
+            data = {str(i): data[i] for i in xrange(len(data))}
+        return super(JSONParser, self).setup(data)
+
+class YAMLParser(Parser):
+    """Parser for YAML text and files.
+    Requirements:
+        package PyYAML must be installed
+    Valid input is syntactically correct YAML text or file
+    """
+
+    def __init__(self):
+        super(JSONParser, self).__init__()
+
+    def loads(self, text):
+        return yaml.load(text)
 
 class XMLParser(BaseUtils):
 
