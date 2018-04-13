@@ -140,7 +140,7 @@ def main(argv = sys.argv[1:]):
         if config == appconfig:
             log.warn("use provided config: %s" % appconfig)
         else:
-            log.warn("provided config could not be used. Please check path (%s)" % congig)
+            log.warn("provided config could not be used. Please check path (%s)" % config)
             log.warn("use config: %s" % appconfig)
 
     # if we are not registered yet (1st run for provided domain)
