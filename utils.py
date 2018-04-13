@@ -30,7 +30,9 @@ class Utils(object):
         self.__keys = []
         self.__idx = 0
 
-    def set(self, key, value):
+    # set renamed with underscore in order to not conflict with
+    # standard classes (ie ConfigParser)
+    def _set(self, key, value):
         if isinstance(key, basestring) and key:
             self.__defs[key] = value
             if key not in self.__keys:
@@ -45,12 +47,11 @@ class Utils(object):
 
     def delete(self, key):
         if key in self.__keys:
-            i = self.__keys.index(key)
-            del self.__keys[i]
+            self.__keys.remove(key)
             del self.__defs[key]
 
     def __setitem__(self, key, value):
-        self.set(key, value)
+        self._set(key, value)
 
     def __getitem__(self, key):
         return self.get(key)
@@ -92,9 +93,12 @@ class Utils(object):
         if isinstance(data, dict) or isinstance(data, Utils):
             self.reset()
             for k in data:
-                self.set(k, data[k])
+                self._set(k, data[k])
             return data
         return None
+
+    def _dict(self):
+        return {k: self.__defs[k] for k in self.__keys}
 
 class UtilsCI(object):
     __defs = None
@@ -110,7 +114,7 @@ class UtilsCI(object):
         self.__keys = []
         self.__idx = 0
 
-    def set(self, key, value):
+    def _set(self, key, value):
         if isinstance(key, basestring) and key:
             if key.lower() not in self.__defs:
                 self.__keys += [key]
@@ -126,13 +130,15 @@ class UtilsCI(object):
     def delete(self, key):
         if key.lower() in self.__defs:
             del self.__defs[key.lower()]
-            for k in self.__keys:
-                if k.lower() == key.lower():
-                    i = self.__keys.index(k)
-                    del self.__keys[i]
+            self.__keys = [k for k in self.__keys if k.lower() != key.lower()]
+            # this implementation could be not safe
+            # for k in self.__keys:
+            #     if k.lower() == key.lower():
+            #         i = self.__keys.index(k)
+            #         del self.__keys[i]
 
     def __setitem__(self, key, value):
-        self.set(key, value)
+        self._set(key, value)
 
     def __getitem__(self, key):
         return self.get(key)
@@ -171,9 +177,12 @@ class UtilsCI(object):
         if isinstance(data, dict) or isinstance(data, Utils):
             self.reset()
             for k in data:
-                self.set(k, data[k])
+                self._set(k, data[k])
             return data
         return None
+
+    def _dict(self):
+        return {k: self.__defs[k.lower()] for k in self.__keys}
 
 # JavaScript array partial emulation (only add/get functionality along with
 # iteration, length and string representation)
@@ -181,42 +190,51 @@ class JSArray(object):
     __defs = None
     __keys = None
     __i = 0
+
     def __init__(self):
         super(JSArray, self).__init__()
         self.__defs = {}
         self.__keys = ()
         self.__i = 0
-    def set(self, key, value):
+
+    def _set(self, key, value):
         self.__defs[key] = value
         if key not in self.__keys:
             self.__keys += ( key, )
-    def get(self, key):
+
+    def get_(self, key):
         if key in self.__keys:
             return self.__defs[key]
         else:
             return None
+
     def __setitem__(self, key, value):
-        self.set(key, value)
+        self._set(key, value)
+
     def __getitem__(self, key):
-        return self.get(key)
+        return self.get_(key)
+
     def __len__(self):
         return len(self.__keys)
+
     # Define iteration
     def __iter__(self):
         self.__i = 0
         return self
+
     def next(self):
         if self.__i == len(self):
             raise StopIteration
         self.__i += 1
         return self.__keys[self.__i - 1]
+
     def __repr__(self):
         rpr = "["
         for i in self.__keys:
             rpr += "%s," % self.__defs[i]
         return rpr.rstrip(",") + "]"
 
-class LocalTZ (tzinfo):
+class LocalTZ(tzinfo):
 
     __offset = None
     __DSTOffset = None
@@ -250,10 +268,10 @@ class LocalTZ (tzinfo):
         return self.__offset + self.dst(dt)
 
     def tzname(self, dt):
-        return time.tzname[self.isDST()]
+        return time.tzname[self.isDST(dt)]
 
 class ErrorHandlingInterface(object):
-    __errno = 0 # means no error
+    __errno = 0         # means - no error
     __strerror = None
 
     def __init__(self):
