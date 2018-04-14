@@ -676,47 +676,7 @@ class LetsEncrypt(BaseUtils, LogInterface):
             return self.config[ctyp]["token"] + "." + self.base64urlencode(self.signer.JWKThumbprint())
         return None
 
-    # The server creates a registration object with the included contact
-    # information. The “key” element of the registration is set to the public
-    # key used to verify the JWS (i.e., the “jwk” element of the JWS header).
-    # The server returns this registration object in a 201 (Created) response,
-    # with the registration URI in a Location header field. The server MUST
-    # also indicate its new-authorization URI using the “next” link relation.
-    # If the server wishes to present the client with terms under which the
-    # ACME service is to be used, it MUST indicate the URI where such terms can
-    # be accessed in a Link header with link relation “terms-of-service”. As
-    # noted above, the client may indicate its agreement with these terms by
-    # updating its registration to include the “agreement” field, with the
-    # terms URI as its value.
-    # ACMEv1
     def register(self, email = None):
-        # check and set
-        if isinstance(email, basestring):
-            if not self.config.setContact(email):
-                return None
-        if self.config.contact():
-            newreg = LetsEncryptRegistrationNew(self.directory)
-            response = self.send(newreg, email)
-            status = None
-            if response:
-                status = response.getStatus()
-            # store received data to configuration file
-            if status in (201, 409):
-                p = "reg"
-                self.config.setDomain(newreg[p], p)
-                # add registration URI into directory object manually
-                self.directory[p] = newreg[p]
-                if status == 201:
-                    for p in ("initialIp", "createdAt", "id"):
-                        self.config.setDomain(newreg[p], p)
-                    p = "linkagreement"
-                    self.config.setContact(newreg[p], p)
-                    # accept agreement
-                    self.agreement()
-            return status
-        return None
-
-    def registerV2(self, email = None):
         # check and set
         if isinstance(email, basestring):
             if not self.config.setContact(email):
@@ -760,14 +720,6 @@ class LetsEncrypt(BaseUtils, LogInterface):
         return status
 
     def checkRegistration(self):
-        reg = LetsEncryptRegistration(self.directory)
-        response = self.send(reg)
-        status = None
-        if response:
-            status = response.getStatus()
-        return status
-
-    def checkRegistrationV2(self):
         reg = LetsEncryptAccount(self.directory)
         response = self.send(reg)
         status = None
@@ -776,32 +728,6 @@ class LetsEncrypt(BaseUtils, LogInterface):
         return status
 
     def authorization(self):
-        auth = LetsEncryptAuthorizationNew(self.directory)
-        response = self.send(auth, self.config.domain())
-        status = None
-        if response:
-            status = response.getStatus()
-        # if agreement is not accepted
-        # if status == 403:
-        #     if auth["type"] == "urn:acme:error:unauthorized":
-        #         self.agreement()
-        if status == 201:
-            p = "authz"
-            self.config.setDomain(auth[p], p)
-            # add authorization URI into directory object manually
-            self.directory["authz"] = auth[p]
-            # challenges
-            for p in ("status", "expires"):
-                self.config.setChallenges(auth[p], p)
-            challenges = auth["challenges"]
-            # store supported challenges types
-            self.config.setChallenges(",".join([ c["type"] for c in challenges ]))
-            # store challenges
-            for c in challenges:
-                self.config[c["type"]] = c
-        return status
-
-    def authorizationV2(self):
         auth = LetsEncryptOrderNew(self.directory)
         response = self.send(auth, self.config.domain())
         status = None
