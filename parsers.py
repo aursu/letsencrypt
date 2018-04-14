@@ -237,7 +237,6 @@ class FastParser(HTMLParser):
 
     def __init__(self, tag = None, etag = None ):
         HTMLParser.__init__(self)
-        self.reset()
         if isinstance(tag, basestring):
             tag = tag.strip("</>")
             self.__starttag = "<" + tag
