@@ -9,7 +9,7 @@ from web import WebResource, WebResponse, WebInterface
 from parsers import JSONParser
 from utils import Utils, BaseUtils
 from chiffrierung import RS256Signer, SSLObject, DEFAULT_KEY_SIZE, SSL_DATETIME_FORMAT
-from config import DomainConfig
+from config import YAMLDomainConfig
 from log import LogInterface
 
 # https://acme-v01.api.letsencrypt.org/
@@ -262,7 +262,7 @@ class LetsEncryptAccountFinding(LetsEncryptResource):
         super(LetsEncryptAccountFinding, self).__init__(name, url)
 
     def payload(self, email = None, agreement = None ):
-
+        payload = {}
         # onlyReturnExisting (optional, boolean):  If this field is present with
         # the value "true", then the server MUST NOT create a new account if one
         # does not already exist.  This allows a client to look up an account
@@ -450,7 +450,7 @@ class LetsEncrypt(BaseUtils, LogInterface):
     def __init__(self, domain, config = None):
         super(LetsEncrypt, self).__init__()
         self.signer = RS256Signer()
-        self.config = DomainConfig(domain, config)
+        self.config = YAMLDomainConfig(domain, config)
         self.directory = LetsEncryptDirectory()
         self.sslobject = SSLObject()
 
