@@ -65,6 +65,9 @@ class Utils(object):
     def __len__(self):
         return len(self.__keys)
 
+    def empty(self):
+        return len(self) == 0
+
     # in case if __len__ redefined - count() should keep iteration working
     def count(self):
         return len(self.__keys)
@@ -148,6 +151,9 @@ class UtilsCI(object):
 
     def __len__(self):
         return len(self.__keys)
+
+    def empty(self):
+        return len(self) == 0
 
     # in case if __len__ redefined - count() should keep iteration working
     def count(self):
