@@ -7,6 +7,7 @@ from utils import Utils, BaseUtils
 import ConfigParser
 from chiffrierung import DEFAULT_KEY_SIZE
 from parsers import Parser, YAMLParser
+from log import LogInterface
 
 # emulate ConfigParser standard class interface (partially)
 # ConfigFileParser is interface because method loads() is not overridden
@@ -107,72 +108,88 @@ class ConfigFileParser(Parser):
         self[section][option] = value
         return True
 
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.has_option
+    def has_option(self, section, option):
+        if not self.has_section(section):
+            if option in self:  # check defaults
+                if not self.has_section(option):
+                    return True
+            return False
+
+        if option in self[section]:
+            return True
+
+        return False
+
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.get
+    def get(self, section, option):
+
+        if self.has_option(section, option):
+            if self.has_section(section):
+                return self[section][option]
+            else:
+                return self[option]
+
+        raise ConfigParser.NoOptionError(option, section)
+
     def write(self, fp):
         self.dump(fp)
 
 # .INI (or .CNF) files support
-class Configuration(BaseUtils):
+class Configuration(BaseUtils, LogInterface):
 
     parser = None
     path = None
 
     def __init__(self, fname = None):
         super(Configuration, self).__init__()
-
         self.parser = ConfigParser.ConfigParser()
-
         if isinstance(fname, basestring):
             self.path = fname
-
         self.initialize()
 
     def initialize(self):
         if self.path:
             self.load(self.path)
 
+    def reset(self):
+        self.parser = ConfigParser.ConfigParser()
+        super(Configuration, self).reset()
+
     # read configuration file "fname" and load its content into self object
     def load(self, fname):
-        self.reset()
         if isinstance(fname, basestring) and os.path.isfile(fname):
+            self.reset()
             try:
                 self.parser.read(fname)
-                for s in self.parser.sections():
-                    self[s] = dict(self.parser.items(s))
-                return len(self)
+                return len(self.parser.sections())
             except ConfigParser.MissingSectionHeaderError:
                 # wrong syntax of config file rejects whole file
                 pass
         return None
 
     def setOption(self, section, option, value):
-        if not self[section]:
-            # empty section
-            self[section] = {}
+        if not self.parser.has_section(section):
+            self.parser.add_section(section)
         if value is None:
             value = ""
-        self[section][option] = str(value)
-        return self[section][option]
+        self.parser.set(section, option, str(value))
+        return self.parser.get(section, option)
 
     def getOption(self, section, option):
-        if self[section] and option in self[section]:
-            return self[section][option]
+        if self.parser.has_option(section, option):
+            return self.parser.get(section, option)
         return None
 
     # save data to file
     def save(self, fname):
-        # fill in parser object
-        for section in self:
-            # add sections
-            if self.parser.has_section(section):
-                self.parser.remove_section(section)
-            self.parser.add_section(section)
-            # set options inside each section
-            for option in self[section]:
-                self.parser.set(section, option, self[section][option])
         fp = self.openfile(fname, 'w')
         if fp:
             self.parser.write(fp)
             fp.close()
+
+    def __len__(self):
+        return len(self.parser.sections())
 
 class DomainConfig(Configuration):
 
@@ -181,14 +198,9 @@ class DomainConfig(Configuration):
     # fname should be provided in case if configuration file stored in separate
     # folder (not CWD)
     def __init__(self, domain, fname = None):
-
-        # this call required before setDomain method use
-        self.reset()
-        self.setDomain(domain)  # validate domain
-
-        if not self.__domain:
+        # validate domain
+        if not self.__setDomain(domain):
             raise ValueError("Missing or incorrect domain name")
-
         super(DomainConfig, self).__init__(fname)
 
     # parameter provides ability to redefine domain (reinitialize)
@@ -213,18 +225,26 @@ class DomainConfig(Configuration):
 
         # on this point configuration file must be defined
         if not self.path:
-            self.path = domain + ".cfg"
+            self.path = domain + '.cfg'
 
     def save(self):
         super(DomainConfig, self).save(self.path)
+
+    def __setDomain(self, domain):
+        if not (isinstance(domain, basestring) and domain):
+            return None
+        # check domain name validity (simple check - no punicode)
+        r = re.compile(r'^([a-z0-9]+(-[a-z0-9]+)*.)+[a-z]{2,}$', re.I)
+        if r.match(domain) is None:
+            return None
+        self.__domain = domain
+        return self.__domain
 
     def setDomain(self, domain, p = "domain"):
         if p == "domain":
             # section "main", option "domain"
             # check domain name validity (simple check - no punicode)
-            r = re.compile(r'^([a-z0-9]+(-[a-z0-9]+)*.)+[a-z]{2,}$', re.I)
-            if isinstance(domain, basestring) and r.match(domain) is not None:
-                self.__domain = domain
+            if self.__setDomain(domain):
                 return self.setOption("main", "domain", domain)
         else:
             return self.setOption("main", p, domain)
@@ -237,12 +257,11 @@ class DomainConfig(Configuration):
             if isinstance(value, basestring) and value:
                 value = self.base64urlencode(value)
                 return self.setOption("key", p, value)
-        else:
-            if p == "bits":
-                try:
-                    value = int(value)
-                except TypeError:
-                    value = DEFAULT_KEY_SIZE
+        elif p == "bits":
+            try:
+                value = int(value)
+            except TypeError:
+                value = DEFAULT_KEY_SIZE
             return self.setOption("key", p, value)
         return None
 
@@ -302,3 +321,7 @@ class YAMLDomainConfig(DomainConfig):
     def initialize(self, domain = None):
         self.parser = YAMLConfig()
         super(YAMLDomainConfig, self).initialize(domain)
+
+    def reset(self):
+        super(YAMLDomainConfig, self).reset()
+        self.parser = YAMLConfig()
