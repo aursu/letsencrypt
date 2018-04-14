@@ -7,7 +7,6 @@ from utils import Utils, BaseUtils
 import ConfigParser
 from chiffrierung import DEFAULT_KEY_SIZE
 from parsers import Parser, YAMLParser
-from log import LogInterface
 
 # emulate ConfigParser standard class interface (partially)
 # ConfigFileParser is interface because method loads() is not overridden
@@ -136,7 +135,7 @@ class ConfigFileParser(Parser):
         self.dump(fp)
 
 # .INI (or .CNF) files support
-class Configuration(BaseUtils, LogInterface):
+class Configuration(BaseUtils):
 
     parser = None
     path = None
