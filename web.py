@@ -89,11 +89,11 @@ class HTTPMessage(UtilsCI):
         return self.__version
 
     # set HTTP header
-    def set(self, header, value):
+    def _set(self, header, value):
         # headers could not be empty: no value - no header
         # support integer 0 as wells
         if value or isinstance(value, int):
-            return super(HTTPMessage, self).set(header, str(value))
+            return super(HTTPMessage, self)._set(header, str(value))
         return None
 
     # https://tools.ietf.org/html/rfc7230#section-3.2.2
@@ -125,9 +125,9 @@ class HTTPMessage(UtilsCI):
                         header += [str(value)]
                     else:
                         header = [header, str(value)]
-                    return super(HTTPMessage, self).set(h, header)
+                    return super(HTTPMessage, self)._set(h, header)
                 else:
-                    return self.set(h, value)
+                    return self._set(h, value)
         return None
 
     def reset(self):
@@ -144,10 +144,10 @@ class WebData(UtilsCI):
         super(WebData, self).__init__()
 
     # python None is empty string
-    def set(self, key, value):
+    def _set(self, key, value):
         if value is None:
             value = ""
-        return super(WebData, self).set(key, str(value))
+        return super(WebData, self)._set(key, str(value))
 
     def getRaw(self):
         rawdata = ""
@@ -246,7 +246,7 @@ class SetupHeadersInterface(object):
         self.__headers = HTTPMessage()
 
     def setHeader(self, name, value):
-        return self.__headers.set(name, value)
+        return self.__headers._set(name, value)
 
     # Ability to have WebResource specific headers
     def addHeader(self, name, value):
@@ -299,7 +299,7 @@ class WebSite(WebService, SetupHeadersInterface):
     def setHost(self, hostname):
         if isinstance(hostname, basestring) and hostname:
             hostname = hostname.lower()
-            checker = re.compile("^([a-z0-9]+([a-z0-9-]*[a-z0-9])*)((\.[a-z0-9]+([a-z0-9-]*[a-z0-9])*)*(\.([a-z]{2,}|xn--[a-z0-9]{2,})))?$", re.I)
+            checker = re.compile(r'^([a-z0-9]+([a-z0-9-]*[a-z0-9])*)((.[a-z0-9]+([a-z0-9-]*[a-z0-9])*)*(.([a-z]{2,}|xn--[a-z0-9]{2,})))?$', re.I)
             if checker.match(hostname) is not None:
                 self.__hostname = hostname
                 # website specific header
