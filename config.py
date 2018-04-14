@@ -118,9 +118,12 @@ class Configuration(BaseUtils):
 
     def __init__(self, fname = None):
         super(Configuration, self).__init__()
+
         self.parser = ConfigParser.ConfigParser()
+
         if isinstance(fname, basestring):
             self.path = fname
+
         self.initialize()
 
     def initialize(self):
@@ -138,7 +141,7 @@ class Configuration(BaseUtils):
                 return len(self)
             except ConfigParser.MissingSectionHeaderError:
                 # wrong syntax of config file rejects whole file
-                return 0
+                pass
         return None
 
     def setOption(self, section, option, value):
@@ -166,13 +169,10 @@ class Configuration(BaseUtils):
             # set options inside each section
             for option in self[section]:
                 self.parser.set(section, option, self[section][option])
-        f = self.openfile(fname, 'w')
-        if f:
-            self.parser.write(f)
-            f.close()
-
-    def empty(self):
-        return len(self) == 0
+        fp = self.openfile(fname, 'w')
+        if fp:
+            self.parser.write(fp)
+            fp.close()
 
 class DomainConfig(Configuration):
 
@@ -184,8 +184,7 @@ class DomainConfig(Configuration):
 
         # this call required before setDomain method use
         self.reset()
-        # validate domain
-        self.setDomain(domain)
+        self.setDomain(domain)  # validate domain
 
         if not self.__domain:
             raise ValueError("Missing or incorrect domain name")
@@ -204,7 +203,7 @@ class DomainConfig(Configuration):
         if not self.path:
             self.load(domain + ".cfg")
 
-        # check data loaded and correct
+        # check if data loaded and correct
         if self.domain() != domain:
             if self.path:
                 # if content from configuration file is not correct (different
