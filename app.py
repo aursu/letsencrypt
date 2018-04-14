@@ -147,15 +147,15 @@ def main(argv = sys.argv[1:]):
     if not app.config.domain("account"):
         # registration
         log.warn("register domain %s" % domain)
-        status = app.registerV2(mailto)
+        status = app.register(mailto)
         if status is None:
             log.warn("error: email address is not correct (mailto: %s)" % mailto)
             usage()
     else:
-        app.checkRegistrationV2()
+        app.checkRegistration()
 
     if authz and (not app.config.domain("order") or force):
-        app.authorizationV2()
+        app.authorization()
 
     sys.exit(0)
 
@@ -180,4 +180,3 @@ def main(argv = sys.argv[1:]):
         app.revoke(crt)
 
 main()
-
