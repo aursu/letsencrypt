@@ -54,6 +54,13 @@ class Parser(BaseUtils):
                 pass
         return None
 
+    def dumps(self):
+        raise NotImplementedError
+
+    def dump(self, fp):
+        text = self.dumps()
+        fp.write(text)
+
 class JSONParser(Parser):
 
     def __init__(self):
@@ -70,13 +77,19 @@ class JSONParser(Parser):
 
     # to support integer indexes as well (allow us to support Python list
     # for initialization)
-    def set(self, key, value):
-        return super(JSONParser, self).set(str(key), value)
+    def _set(self, key, value):
+        return super(JSONParser, self)._set(str(key), value)
 
     def setup(self, data):
         if isinstance(data, list):
             data = {str(i): data[i] for i in xrange(len(data))}
         return super(JSONParser, self).setup(data)
+
+    def dumps(self):
+        return json.dumps(self._dict(), indent = 2)
+
+    def dump(self, fp):
+        return json.dump(self._dict(), fp, indent = 2)
 
 class YAMLParser(Parser):
     """Parser for YAML text and files.
@@ -86,10 +99,18 @@ class YAMLParser(Parser):
     """
 
     def __init__(self):
-        super(JSONParser, self).__init__()
+        super(YAMLParser, self).__init__()
 
     def loads(self, text):
         return yaml.load(text)
+
+    def dumps(self):
+        return yaml.dump(self._dict(), default_flow_style = False,
+                explicit_start = True)
+
+    def dump(self, fp):
+        return yaml.dump(self._dict(), fp, default_flow_style = False,
+                explicit_start = True)
 
 class XMLParser(BaseUtils):
 
