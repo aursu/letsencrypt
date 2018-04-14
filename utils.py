@@ -40,7 +40,7 @@ class Utils(object):
             return value
         return None
 
-    def get(self, key):
+    def _get(self, key):
         if key in self.__keys:
             return self.__defs[key]
         return None
@@ -54,7 +54,7 @@ class Utils(object):
         self._set(key, value)
 
     def __getitem__(self, key):
-        return self.get(key)
+        return self._get(key)
 
     # def __getattr__(self, name):
     #     return self[name]
@@ -134,11 +134,6 @@ class UtilsCI(object):
         if key.lower() in self.__defs:
             del self.__defs[key.lower()]
             self.__keys = [k for k in self.__keys if k.lower() != key.lower()]
-            # this implementation could be not safe
-            # for k in self.__keys:
-            #     if k.lower() == key.lower():
-            #         i = self.__keys.index(k)
-            #         del self.__keys[i]
 
     def __setitem__(self, key, value):
         self._set(key, value)
