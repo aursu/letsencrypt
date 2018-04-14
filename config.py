@@ -3,10 +3,10 @@
 
 import os.path
 import re
-from utils import BaseUtils
+from utils import Utils, BaseUtils
 import ConfigParser
 from chiffrierung import DEFAULT_KEY_SIZE
-from parsers import Parser
+from parsers import Parser, YAMLParser
 
 # emulate ConfigParser standard class interface (partially)
 # ConfigFileParser is interface because method loads() is not overridden
@@ -16,24 +16,17 @@ class ConfigFileParser(Parser):
     __defaults = None
 
     def __init__(self):
-        super(Parser, self).__init__()
+        super(ConfigFileParser, self).__init__()
         self.reset()
 
-    # method setup() is in use by method parse() to setup already parsed and
-    # validated data into self object
-    # method setup() provided by class Utils
-    # method parse() provided by class Parser
-    def setup(self, data):
-        if isinstance(data, dict) or isinstance(data, Utils):
-            self.reset()
-            for s in data:
-                if isinstance(data[s], dict):
-                    self.__sections += [s]
-                else:
-                    self.__defaults += [(s, data[s])]
-                self.set(s, data[s])
-            return data
-        return None
+    def _set(self, key, value):
+        if isinstance(value, dict):
+            if not self.has_section(key):
+                self.__sections += [key]
+        else:
+            # hope it is not bad idea to keep it not uniq :)
+            self.__defaults += [(key, value)]
+        return super(ConfigFileParser, self)._set(key, value)
 
     def reset(self):
         self.__sections = []
@@ -45,10 +38,15 @@ class ConfigFileParser(Parser):
     def read(self, filename):
         self.parse(filename)
 
+    def defaults(self):
+        # return shallow copy
+        return self.__defaults[:]
+
     # partially match RawConfigParser.sections
     # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.sections
     def sections(self):
-        return self.__sections
+        # return shallow copy
+        return self.__sections[:]
 
     # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.has_section
     def has_section(self, section):
@@ -56,20 +54,22 @@ class ConfigFileParser(Parser):
 
     # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.items
     def items(self, section):
-        # basic validation
-        if not (isinstance(section, basestring) and section and self.valid()):
-            return None
+
+        if section is None:
+            return self.defaults()
 
         # no section - not items
         if not self.has_section(section):
-            return None
+            raise ConfigParser.NoSectionError(section)
 
-        return [(s, items[s]) for s in self[section]]
+        # section is dictionary which support shallow copy
+        items = self[section].copy()
+        return [(s, items[s]) for s in items]
 
     # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.remove_section
     def remove_section(self, section):
         if not self.has_section(section):
-            return False
+            raise ConfigParser.NoSectionError(section)
 
         del self[section]
         self.__sections.remove(section)
@@ -78,13 +78,37 @@ class ConfigFileParser(Parser):
 
     # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.add_section
     def add_section(self, section):
+        # Add a section named section to the instance. If a section by the given
+        # name already exists, DuplicateSectionError is raised
         if self.has_section(section):
+            raise ConfigParser.DuplicateSectionError(section)
+
+        if not (isinstance(section, basestring) and section):
             return False
 
         self[section] = {}
-        self.__sections += [section]
 
         return True
+
+    # https://docs.python.org/2/library/configparser.html#ConfigParser.RawConfigParser.set
+    def set(self, section, option, value = None):
+
+        if not (isinstance(option, basestring) and option):
+            return False
+        # handle default values (section name is None)
+        if section is None:
+            self[option] = value
+            return True
+        # If the given section exists, set the given option to the specified
+        # value; otherwise raise NoSectionError
+        if not self.has_section(section):
+            raise ConfigParser.NoSectionError(section)
+
+        self[section][option] = value
+        return True
+
+    def write(self, fp):
+        self.dump(fp)
 
 # .INI (or .CNF) files support
 class Configuration(BaseUtils):
@@ -97,7 +121,11 @@ class Configuration(BaseUtils):
         self.parser = ConfigParser.ConfigParser()
         if isinstance(fname, basestring):
             self.path = fname
-            self.load(fname)
+        self.initialize()
+
+    def initialize(self):
+        if self.path:
+            self.load(self.path)
 
     # read configuration file "fname" and load its content into self object
     def load(self, fname):
@@ -130,15 +158,15 @@ class Configuration(BaseUtils):
     # save data to file
     def save(self, fname):
         # fill in parser object
-        for s in self:
-            # add sections if missed
-            if self.parser.has_section(s):
-                self.parser.remove_section(s)
-            self.parser.add_section(s)
+        for section in self:
+            # add sections
+            if self.parser.has_section(section):
+                self.parser.remove_section(section)
+            self.parser.add_section(section)
             # set options inside each section
-            for o in self[s]:
-                self.parser.set(s, o, self[s][o] )
-        f = self.openfile(fname, "w")
+            for option in self[section]:
+                self.parser.set(section, option, self[section][option])
+        f = self.openfile(fname, 'w')
         if f:
             self.parser.write(f)
             f.close()
@@ -154,29 +182,37 @@ class DomainConfig(Configuration):
     # folder (not CWD)
     def __init__(self, domain, fname = None):
 
-        # this call required before parent constructor call
+        # this call required before setDomain method use
         self.reset()
-
         # validate domain
         self.setDomain(domain)
+
         if not self.__domain:
             raise ValueError("Missing or incorrect domain name")
 
         super(DomainConfig, self).__init__(fname)
-        self.initialize(domain)
 
-    def initialize(self, domain):
-        # configuration file consists valid domain configuration
-        # or provided file is empty or non-existing
+    # parameter provides ability to redefine domain (reinitialize)
+    def initialize(self, domain = None):
+
+        super(DomainConfig, self).initialize()
+
+        if domain is None:
+            domain = self.__domain
+
+        # configuration file was not provided - try to read default location
         if not self.path:
             self.load(domain + ".cfg")
 
-        if self.domain() == domain:
-            pass
-        else:
+        # check data loaded and correct
+        if self.domain() != domain:
             if self.path:
+                # if content from configuration file is not correct (different
+                # domain name), than ignore it
                 self.reset()
             self.setDomain(domain)
+
+        # on this point configuration file must be defined
         if not self.path:
             self.path = domain + ".cfg"
 
@@ -187,7 +223,7 @@ class DomainConfig(Configuration):
         if p == "domain":
             # section "main", option "domain"
             # check domain name validity (simple check - no punicode)
-            r = re.compile("^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$", re.I)
+            r = re.compile(r'^([a-z0-9]+(-[a-z0-9]+)*.)+[a-z]{2,}$', re.I)
             if isinstance(domain, basestring) and r.match(domain) is not None:
                 self.__domain = domain
                 return self.setOption("main", "domain", domain)
@@ -214,7 +250,7 @@ class DomainConfig(Configuration):
     def setContact(self, value, p = "mailto"):
         if p == "mailto":
             # validate e-mail
-            e = re.compile("^[a-z0-9_.-]+@([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$", re.I)
+            e = re.compile(r'^[a-z0-9_.-]+@([a-z0-9]+(-[a-z0-9]+)*.)+[a-z]{2,}$', re.I)
             if isinstance(value, basestring) and e.match(value) is not None:
                 return self.setOption("contact", "mailto", value)
         else:
@@ -253,3 +289,17 @@ class DomainConfig(Configuration):
             if isinstance(value, basestring) and value:
                 value = self.base64urldecode(value)
         return value
+
+class YAMLConfig(ConfigFileParser, YAMLParser):
+
+    def __init__(self):
+        super(YAMLConfig, self).__init__()
+
+class YAMLDomainConfig(DomainConfig):
+
+    def __init__(self, domain, fname = None):
+        super(YAMLDomainConfig, self).__init__(domain, fname)
+
+    def initialize(self, domain = None):
+        self.parser = YAMLConfig()
+        super(YAMLDomainConfig, self).initialize(domain)
