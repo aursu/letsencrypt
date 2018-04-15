@@ -20,15 +20,10 @@ class LogUtils(BaseUtils):
     __entrysep = ""
     __dest = sys.stderr
     __std = True    # standard error output
-    __stdcolor = None
 
     def __init__(self, entry = None):
         super(LogUtils, self).__init__()
         self.logentry(entry)
-
-    def color(self, color):
-        self.__stdcolor = color
-        return self
 
     # set entry (like domain, hostname, user) for which logs entry gathered
     def logentry(self, entry = None ):
